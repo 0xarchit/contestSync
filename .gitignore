@@ -3,6 +3,10 @@ server
 server.exe
 *.exe
 
+# Docker
+.docker/
+docker-compose.override.yml
+
 # Env
 .env
 
