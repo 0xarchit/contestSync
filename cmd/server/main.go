@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io/fs"
 	"log"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/0xarchit/contestsync/internal/db"
 	"github.com/0xarchit/contestsync/internal/scheduler"
 	"github.com/0xarchit/contestsync/internal/sync"
+	"github.com/0xarchit/contestsync/web"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/gorilla/sessions"
@@ -96,8 +98,13 @@ func main() {
 		})
 	})
 
-	fs := http.FileServer(http.Dir("web/static"))
-	r.Handle("/*", fs)
+	// Embedded Static files
+	staticSub, err := fs.Sub(ui.StaticFS, "static")
+	if err != nil {
+		log.Fatal(err)
+	}
+	serverFS := http.FileServer(http.FS(staticSub))
+	r.Handle("/*", serverFS)
 
 	slog.Info("server starting", "port", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
