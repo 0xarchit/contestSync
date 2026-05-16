@@ -1,0 +1,20 @@
+# Binaries
+server
+server.exe
+*.exe
+
+# Env
+.env
+
+# Go
+vendor/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Certificates
+*.pem
+*.crt
+
+gemini.md
