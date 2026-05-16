@@ -1,0 +1,106 @@
+package main
+
+import (
+	"context"
+	"log"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/0xarchit/contestsync/config"
+	"github.com/0xarchit/contestsync/internal/api"
+	"github.com/0xarchit/contestsync/internal/auth"
+	"github.com/0xarchit/contestsync/internal/db"
+	"github.com/0xarchit/contestsync/internal/scheduler"
+	"github.com/0xarchit/contestsync/internal/sync"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/gorilla/sessions"
+	"github.com/joho/godotenv"
+)
+
+func main() {
+	godotenv.Load()
+	cfg := config.Load()
+
+	ctx := context.Background()
+	pool, err := db.Init(ctx, cfg.DatabaseURL, cfg.CACertificate, cfg.ConnectionLimit)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer pool.Close()
+
+	sessionStore := sessions.NewCookieStore(cfg.SessionSecret)
+	sessionStore.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 7,
+		HttpOnly: true,
+		Secure:   cfg.Env == "production",
+		SameSite: http.SameSiteLaxMode,
+	}
+
+	authProvider := auth.NewProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
+
+	syncer := &sync.Syncer{
+		DB:            pool,
+		AuthProvider:  authProvider,
+		SessionSecret: cfg.EncryptionKey, // Use dedicated encryption key
+	}
+
+	handlers := &api.Handlers{
+		DB:            pool,
+		SessionStore:  sessionStore,
+		AuthProvider:  authProvider,
+		SessionSecret: cfg.EncryptionKey, // Use dedicated encryption key
+		Syncer:        syncer,
+	}
+
+	sched := scheduler.New(pool, syncer)
+	sched.Start()
+
+	adminHandlers := &api.AdminHandlers{
+		Scheduler:     sched,
+		AdminPassword: cfg.AdminPassword,
+	}
+
+	r := chi.NewRouter()
+
+	r.Use(api.RequestIDMiddleware)
+	r.Use(api.SecurityHeadersMiddleware(cfg.Env))
+	r.Use(api.RateLimitMiddleware(60, time.Minute))
+	r.Use(api.RequestLoggerMiddleware)
+	r.Use(middleware.Recoverer)
+
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
+	r.Get("/auth/google", handlers.GoogleLogin)
+	r.Get("/auth/google/callback", handlers.GoogleCallback)
+
+	// Admin Routes
+	r.Get("/admin/update", adminHandlers.UpdateContests)
+	r.Get("/admin/sync", adminHandlers.SyncAll)
+
+	r.Group(func(r chi.Router) {
+		r.Use(api.RequireAuth(sessionStore))
+		r.Get("/me", handlers.Me)
+		r.Get("/platforms", handlers.GetPlatforms)
+
+		r.Group(func(r chi.Router) {
+			r.Use(api.CSRFMiddleware(sessionStore))
+			r.Post("/preferences", handlers.SavePreferences)
+			r.Post("/sync", handlers.ManualSync)
+			r.Delete("/account", handlers.DeleteAccount)
+		})
+	})
+
+	fs := http.FileServer(http.Dir("web/static"))
+	r.Handle("/*", fs)
+
+	slog.Info("server starting", "port", cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
+		log.Fatal(err)
+	}
+}
