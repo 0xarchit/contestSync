@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preferences — ContestSync</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script src="https://unpkg.com/lenis@1.1.14/dist/lenis.min.js"></script>
+    <script src="app.js" defer></script>
+</head>
+<body>
+    <div class="noise-overlay"></div>
+
+    <div class="pref-container">
+        <div class="pref-card">
+            <div id="user-email" class="user-email"></div>
+            <h1>Choose your platforms</h1>
+            <p>We'll sync contests from these to your Google Calendar.</p>
+
+            <form id="pref-form">
+                <div id="platforms-list" class="platforms-list">
+                    <div class="loading-state">Loading platforms...</div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1rem;">Start Sync</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
