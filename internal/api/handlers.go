@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/0xarchit/contestsync/internal/auth"
-	"github.com/0xarchit/contestsync/internal/sync"
+	"github.com/0xarchit/contestsync/internal/queue"
 	"github.com/0xarchit/contestsync/models"
 	"github.com/gorilla/sessions"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,18 +23,18 @@ type Handlers struct {
 	SessionStore  *sessions.CookieStore
 	AuthProvider  *auth.Provider
 	SessionSecret []byte
-	Syncer        *sync.Syncer
+	Queue         *queue.Queue
 }
 
 func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(ContextKeyUserID).(int)
-	if err := h.Syncer.SyncUser(r.Context(), userID); err != nil {
-		slog.Error("manual sync failed", "user_id", userID, "error", err)
-		http.Error(w, `{"error":"sync failed"}`, http.StatusInternalServerError)
+	if err := h.Queue.PublishSyncTask(r.Context(), userID); err != nil {
+		slog.Error("manual sync queuing failed", "user_id", userID, "error", err)
+		http.Error(w, `{"error":"sync failed to queue"}`, http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	json.NewEncoder(w).Encode(map[string]string{"status": "sync queued"})
 }
 
 func (h *Handlers) GoogleLogin(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +74,7 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"missing state cookie"}`, http.StatusBadRequest)
 		return
 	}
-	
+
 	if cookie.Value != state {
 		http.Error(w, `{"error":"invalid state"}`, http.StatusBadRequest)
 		return
@@ -147,16 +147,16 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// Regenerate session to prevent fixation
 	session.Options.MaxAge = -1
 	session.Save(r, w)
-	
+
 	session, _ = h.SessionStore.New(r, "session")
 	session.Values["user_id"] = userID
-	
+
 	csrfToken, err := generateRandomString(32)
 	if err != nil {
 		slog.Error("failed to generate csrf token", "error", err)
 	}
 	session.Values["csrf_token"] = csrfToken
-	
+
 	if err := session.Save(r, w); err != nil {
 		slog.Error("failed to save session", "error", err)
 		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
@@ -164,6 +164,11 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("user logged in", "user_id", userID)
+
+	// Queue initial sync for new/returning user
+	if err := h.Queue.PublishSyncTask(r.Context(), userID); err != nil {
+		slog.Error("failed to queue initial sync", "user_id", userID, "error", err)
+	}
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "csrf_token",
@@ -185,7 +190,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := val.(int)
-	
+
 	var user struct {
 		models.User
 		Platforms []string `json:"platforms"`
@@ -197,7 +202,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"user not found"}`, http.StatusNotFound)
 		return
 	}
-	
+
 	user.CalendarID = ""
 	if calendarID.Valid {
 		user.CalendarID = calendarID.String
@@ -222,7 +227,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(ContextKeyUserID).(int)
 
-	// Since we have ON DELETE CASCADE in the schema, 
+	// Since we have ON DELETE CASCADE in the schema,
 	// deleting the user will remove preferences and synced_events entries automatically.
 	_, err := h.DB.Exec(r.Context(), "DELETE FROM users WHERE id = $1", userID)
 	if err != nil {

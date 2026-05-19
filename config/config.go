@@ -21,6 +21,11 @@ type Config struct {
 	Env             string
 	AllowedOrigin   string
 	AdminPassword   string
+	KafkaHost       string
+	KafkaPort       string
+	KafkaAccessKey  []byte
+	KafkaAccessCert []byte
+	KafkaCACert     []byte
 }
 
 func Load() *Config {
@@ -29,6 +34,10 @@ func Load() *Config {
 	if caCertBase64 != "" {
 		caCert, _ = base64.StdEncoding.DecodeString(caCertBase64)
 	}
+
+	kafkaAccessKey, _ := base64.StdEncoding.DecodeString(os.Getenv("KAFKA_ACCESS_KEY"))
+	kafkaAccessCert, _ := base64.StdEncoding.DecodeString(os.Getenv("KAFKA_ACCESS_CERTIFICATE"))
+	kafkaCACert, _ := base64.StdEncoding.DecodeString(os.Getenv("KAFKA_CA_CERTIFICATE"))
 
 	connLimit, _ := strconv.Atoi(os.Getenv("CONNECTION_LIMIT"))
 	if connLimit == 0 {
@@ -63,5 +72,10 @@ func Load() *Config {
 		Env:             env,
 		AllowedOrigin:   os.Getenv("ALLOWED_ORIGIN"),
 		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
+		KafkaHost:       os.Getenv("KAFKA_HOST"),
+		KafkaPort:       os.Getenv("KAFKA_PORT"),
+		KafkaAccessKey:  kafkaAccessKey,
+		KafkaAccessCert: kafkaAccessCert,
+		KafkaCACert:     kafkaCACert,
 	}
 }

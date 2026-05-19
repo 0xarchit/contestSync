@@ -12,7 +12,9 @@ import (
 	"github.com/0xarchit/contestsync/internal/api"
 	"github.com/0xarchit/contestsync/internal/auth"
 	"github.com/0xarchit/contestsync/internal/db"
+	"github.com/0xarchit/contestsync/internal/queue"
 	"github.com/0xarchit/contestsync/internal/scheduler"
+
 	"github.com/0xarchit/contestsync/internal/sync"
 	"github.com/0xarchit/contestsync/web"
 	"github.com/go-chi/chi/v5"
@@ -44,22 +46,27 @@ func main() {
 	authProvider := auth.NewProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
 
 	syncer := &sync.Syncer{
-		DB:            pool,
-		AuthProvider:  authProvider,
-		SessionSecret: cfg.EncryptionKey, // Use dedicated encryption key
+	        DB:            pool,
+	        AuthProvider:  authProvider,
+	        SessionSecret: cfg.EncryptionKey,
 	}
+
+	q, err := queue.New(cfg, pool, syncer)
+	if err != nil {
+	        log.Fatalf("failed to initialize kafka queue: %v", err)
+	}
+	q.StartConsumers(ctx, cfg)
 
 	handlers := &api.Handlers{
-		DB:            pool,
-		SessionStore:  sessionStore,
-		AuthProvider:  authProvider,
-		SessionSecret: cfg.EncryptionKey, // Use dedicated encryption key
-		Syncer:        syncer,
+	        DB:            pool,
+	        SessionStore:  sessionStore,
+	        AuthProvider:  authProvider,
+	        SessionSecret: cfg.EncryptionKey,
+	        Queue:         q,
 	}
 
-	sched := scheduler.New(pool, syncer)
+	sched := scheduler.New(pool, q)
 	sched.Start()
-
 	adminHandlers := &api.AdminHandlers{
 		Scheduler:     sched,
 		AdminPassword: cfg.AdminPassword,

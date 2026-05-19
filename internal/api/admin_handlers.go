@@ -24,9 +24,7 @@ func (h *AdminHandlers) UpdateContests(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("manual contest update triggered via /admin/update")
 	
-	go func() {
-		h.Scheduler.RunExtraction(context.Background())
-	}()
+	h.Scheduler.RunExtraction(context.Background())
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "update triggered"})
@@ -42,9 +40,7 @@ func (h *AdminHandlers) SyncAll(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("manual global sync triggered via /admin/sync")
 
-	go func() {
-		h.Scheduler.SyncAllUsers(context.Background())
-	}()
+	h.Scheduler.SyncAllUsers(context.Background())
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "global sync triggered"})
