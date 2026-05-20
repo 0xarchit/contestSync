@@ -44,6 +44,8 @@ type Queue struct {
 	useInMemory  bool
 	extractionCh chan string
 	syncCh       chan int
+	kafkaBroker  string
+	kafkaTLS     *tls.Config
 }
 
 func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, error) {
@@ -75,10 +77,24 @@ func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, err
 	}
 
 	return &Queue{
-		Producer: writer,
-		DB:       db,
-		Syncer:   syncer,
+		Producer:    writer,
+		DB:          db,
+		Syncer:      syncer,
+		kafkaBroker: broker,
+		kafkaTLS:    tlsConfig,
 	}, nil
+}
+
+func (q *Queue) Health(ctx context.Context) error {
+	if q.useInMemory {
+		return nil
+	}
+	conn, err := kafka.DialLeader(ctx, "tcp", q.kafkaBroker, TopicExtraction, 0)
+	if err != nil {
+		return fmt.Errorf("kafka unreachable: %w", err)
+	}
+	conn.Close()
+	return nil
 }
 
 func createTLSConfig(cfg *config.Config) (*tls.Config, error) {
