@@ -176,6 +176,8 @@ section{padding-block:clamp(5rem,12vh,9rem);position:relative}
 
 /* Footer */
 .footer{padding:4rem 0;border-top:1px solid var(--bg-border);color:var(--text-dim);text-align:center;font-size:var(--t-label)}
+.footer-links a{transition:color .2s}
+.footer-links a:hover{color:var(--text-primary)}
 
 /* Preferences */
 .pref-container{display:flex;justify-content:center;align-items:center;min-height:100vh;padding:2rem}
