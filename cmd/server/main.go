@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"io/fs"
 	"log"
 	"log/slog"
@@ -120,6 +119,9 @@ func main() {
 	adminHandlers := &api.AdminHandlers{
 		Scheduler:     sched,
 		AdminPassword: cfg.AdminPassword,
+		DB:            pool,
+		Valkey:        valkeyClient,
+		Queue:         q,
 	}
 
 	r := chi.NewRouter()
@@ -130,59 +132,7 @@ func main() {
 	r.Use(api.RequestLoggerMiddleware)
 	r.Use(middleware.Recoverer)
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		type componentStatus struct {
-			Status string `json:"status"`
-			Error  string `json:"error,omitempty"`
-		}
-		type healthResponse struct {
-			Status   string                     `json:"status"`
-			Services map[string]componentStatus `json:"services"`
-		}
-
-		checkCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		services := make(map[string]componentStatus)
-		allHealthy := true
-
-		if err := pool.Ping(checkCtx); err != nil {
-			services["postgres"] = componentStatus{Status: "unhealthy", Error: err.Error()}
-			allHealthy = false
-		} else {
-			services["postgres"] = componentStatus{Status: "healthy"}
-		}
-
-		if valkeyClient != nil {
-			if err := valkeyClient.Ping(checkCtx).Err(); err != nil {
-				services["valkey"] = componentStatus{Status: "unhealthy", Error: err.Error()}
-				allHealthy = false
-			} else {
-				services["valkey"] = componentStatus{Status: "healthy"}
-			}
-		} else {
-			services["valkey"] = componentStatus{Status: "not_configured"}
-		}
-
-		if err := q.Health(checkCtx); err != nil {
-			services["kafka"] = componentStatus{Status: "unhealthy", Error: err.Error()}
-			allHealthy = false
-		} else {
-			services["kafka"] = componentStatus{Status: "healthy"}
-		}
-
-		resp := healthResponse{Services: services}
-		if allHealthy {
-			resp.Status = "ok"
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-		} else {
-			resp.Status = "degraded"
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-		}
-		json.NewEncoder(w).Encode(resp)
-	})
+	r.Get("/health", adminHandlers.HealthCheck)
 
 	r.Get("/auth/google", handlers.GoogleLogin)
 	r.Get("/auth/google/callback", handlers.GoogleCallback)

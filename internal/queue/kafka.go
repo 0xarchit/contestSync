@@ -89,12 +89,42 @@ func (q *Queue) Health(ctx context.Context) error {
 	if q.useInMemory {
 		return nil
 	}
-	conn, err := kafka.DialLeader(ctx, "tcp", q.kafkaBroker, TopicExtraction, 0)
+
+	probe := fmt.Sprintf("health-probe-%d", time.Now().UnixNano())
+
+	err := q.Producer.WriteMessages(ctx, kafka.Message{
+		Topic: TopicExtraction,
+		Key:   []byte("__health__"),
+		Value: []byte(probe),
+	})
 	if err != nil {
-		return fmt.Errorf("kafka unreachable: %w", err)
+		return fmt.Errorf("kafka publish failed: %w", err)
 	}
-	conn.Close()
-	return nil
+
+	dialer := &kafka.Dialer{TLS: q.kafkaTLS}
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:   []string{q.kafkaBroker},
+		Topic:     TopicExtraction,
+		GroupID:   "health-check-group",
+		Dialer:    dialer,
+		MaxWait:   2 * time.Second,
+		MinBytes:  1,
+		MaxBytes:  1024,
+	})
+	defer r.Close()
+
+	readCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+
+	for {
+		m, err := r.ReadMessage(readCtx)
+		if err != nil {
+			return fmt.Errorf("kafka consume failed: %w", err)
+		}
+		if string(m.Value) == probe {
+			return nil
+		}
+	}
 }
 
 func createTLSConfig(cfg *config.Config) (*tls.Config, error) {
