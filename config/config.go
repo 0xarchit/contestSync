@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"os"
 	"strconv"
@@ -30,15 +29,14 @@ type Config struct {
 }
 
 func Load() *Config {
-	caCertBase64 := os.Getenv("CA_CERTIFICATE")
 	var caCert []byte
-	if caCertBase64 != "" {
-		caCert, _ = base64.StdEncoding.DecodeString(caCertBase64)
+	if raw := os.Getenv("CA_CERTIFICATE"); raw != "" {
+		caCert = []byte(raw)
 	}
 
-	kafkaAccessKey, _ := base64.StdEncoding.DecodeString(os.Getenv("KAFKA_ACCESS_KEY"))
-	kafkaAccessCert, _ := base64.StdEncoding.DecodeString(os.Getenv("KAFKA_ACCESS_CERTIFICATE"))
-	kafkaCACert, _ := base64.StdEncoding.DecodeString(os.Getenv("KAFKA_CA_CERTIFICATE"))
+	kafkaAccessKey := []byte(os.Getenv("KAFKA_ACCESS_KEY"))
+	kafkaAccessCert := []byte(os.Getenv("KAFKA_ACCESS_CERTIFICATE"))
+	kafkaCACert := []byte(os.Getenv("KAFKA_CA_CERTIFICATE"))
 
 	connLimit, _ := strconv.Atoi(os.Getenv("CONNECTION_LIMIT"))
 	if connLimit == 0 {
