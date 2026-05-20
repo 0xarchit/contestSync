@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -13,6 +14,9 @@ func FetchLeetcodeContests() ([]Contest, error) {
 	}
 
 	var data struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
 		Data struct {
 			Contests []struct {
 				Title     string  `json:"title"`
@@ -24,6 +28,10 @@ func FetchLeetcodeContests() ([]Contest, error) {
 	}
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, err
+	}
+
+	if len(data.Errors) > 0 {
+		return nil, fmt.Errorf("leetcode graphql error: %s", data.Errors[0].Message)
 	}
 
 	now := float64(time.Now().Unix())

@@ -26,6 +26,7 @@ type Config struct {
 	KafkaAccessKey  []byte
 	KafkaAccessCert []byte
 	KafkaCACert     []byte
+	ValkeyURI       string
 }
 
 func Load() *Config {
@@ -77,5 +78,6 @@ func Load() *Config {
 		KafkaAccessKey:  kafkaAccessKey,
 		KafkaAccessCert: kafkaAccessCert,
 		KafkaCACert:     kafkaCACert,
+		ValkeyURI:       os.Getenv("VALKEY_URI"),
 	}
 }

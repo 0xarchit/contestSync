@@ -10,6 +10,8 @@ type User struct {
 	Email        string    `json:"email"`
 	RefreshToken string    `json:"-"`
 	CalendarID   string    `json:"calendar_id"`
+	UseDedicated bool      `json:"use_dedicated"`
+	Platforms    []string  `json:"platforms"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 

@@ -188,6 +188,10 @@ async function initPreferences() {
             let emailEl = document.getElementById('user-email');
             if (emailEl && me.email) emailEl.textContent = me.email;
             existingPlatforms = me.platforms || [];
+            let useDedicatedCheckbox = document.getElementById('use-dedicated');
+            if (useDedicatedCheckbox) {
+                useDedicatedCheckbox.checked = !!me.use_dedicated;
+            }
         } else if (meRes.status === 401) {
             window.location.href = '/auth/google';
             return;
@@ -212,6 +216,7 @@ async function initPreferences() {
                 atcoder: 'var(--platform-atcoder)',
                 hackerrank: 'var(--platform-hackerrank)',
                 geeksforgeeks: 'var(--platform-gfg)',
+                code360: 'var(--platform-code360)',
             };
 
             container.innerHTML = '';
@@ -238,8 +243,13 @@ async function initPreferences() {
                 submitBtn.textContent = 'Syncing...';
 
                 let selected = Array.from(document.querySelectorAll('input[name="platform"]:checked')).map(i => i.value);
+                let useDedicated = false;
+                let useDedicatedCheckbox = document.getElementById('use-dedicated');
+                if (useDedicatedCheckbox) {
+                    useDedicated = useDedicatedCheckbox.checked;
+                }
                 try {
-                    let res = await securePost('/preferences', { platforms: selected });
+                    let res = await securePost('/preferences', { platforms: selected, use_dedicated: useDedicated });
                     if (res) {
                         await securePost('/sync', {});
                         showSuccess();

@@ -3,13 +3,19 @@ package api
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/hex"
+	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
+	"github.com/redis/go-redis/v9"
 )
 
 type rateLimiter struct {
@@ -45,15 +51,60 @@ func (rl *rateLimiter) limit(ip string, max int, duration time.Duration) bool {
 
 var globalLimiter = &rateLimiter{}
 
-func RateLimitMiddleware(max int, duration time.Duration) func(http.Handler) http.Handler {
+func getClientIP(r *http.Request) string {
+	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+		return ip
+	}
+	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+		if comma := strings.Index(ip, ","); comma != -1 {
+			return strings.TrimSpace(ip[:comma])
+		}
+		return ip
+	}
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func RateLimitMiddleware(valkeyClient *redis.Client, max int, duration time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip := r.RemoteAddr // Simplistic IP extraction
-			if !globalLimiter.limit(ip, max, duration) {
-				w.Header().Set("Retry-After", "60")
-				http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
-				return
+			ip := getClientIP(r)
+
+			if valkeyClient != nil {
+				key := "ratelimit:" + ip
+				ctx := r.Context()
+				pipe := valkeyClient.TxPipeline()
+				incr := pipe.Incr(ctx, key)
+				pipe.Expire(ctx, key, duration)
+				_, err := pipe.Exec(ctx)
+				if err == nil {
+					if incr.Val() > int64(max) {
+						w.Header().Set("Retry-After", "60")
+						http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+						return
+					}
+				} else {
+					slog.Error("valkey rate limiter error, falling back to local rate limiter", "error", err)
+					if !globalLimiter.limit(ip, max, duration) {
+						w.Header().Set("Retry-After", "60")
+						http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+						return
+					}
+				}
+			} else {
+				if !globalLimiter.limit(ip, max, duration) {
+					w.Header().Set("Retry-After", "60")
+					http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+					return
+				}
 			}
+
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -102,12 +153,12 @@ func RequestLoggerMiddleware(next http.Handler) http.Handler {
 			"method", r.Method,
 			"path", r.URL.Path,
 			"duration", time.Since(start),
-			"ip", r.RemoteAddr,
+			"ip", getClientIP(r),
 		)
 	})
 }
 
-func RequireAuth(store *sessions.CookieStore) func(http.Handler) http.Handler {
+func RequireAuth(store sessions.Store) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			session, err := store.Get(r, "session")
@@ -128,7 +179,7 @@ func RequireAuth(store *sessions.CookieStore) func(http.Handler) http.Handler {
 	}
 }
 
-func CSRFMiddleware(store *sessions.CookieStore) func(http.Handler) http.Handler {
+func CSRFMiddleware(store sessions.Store) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			session, _ := store.Get(r, "session")
@@ -139,7 +190,7 @@ func CSRFMiddleware(store *sessions.CookieStore) func(http.Handler) http.Handler
 			}
 
 			actualToken := r.Header.Get("X-CSRF-Token")
-			if subtle.ConstantTimeCompare([]byte(expectedToken), []byte(actualToken)) != 1 {
+			if len(expectedToken) != len(actualToken) || subtle.ConstantTimeCompare([]byte(expectedToken), []byte(actualToken)) != 1 {
 				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 				return
 			}
@@ -147,4 +198,116 @@ func CSRFMiddleware(store *sessions.CookieStore) func(http.Handler) http.Handler
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+type ValkeyStore struct {
+	client  *redis.Client
+	codecs  []securecookie.Codec
+	options *sessions.Options
+}
+
+func NewValkeyStore(client *redis.Client, keyPairs ...[]byte) *ValkeyStore {
+	return &ValkeyStore{
+		client: client,
+		codecs: securecookie.CodecsFromPairs(keyPairs...),
+		options: &sessions.Options{
+			Path:     "/",
+			MaxAge:   86400 * 7,
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+		},
+	}
+}
+
+func (s *ValkeyStore) Get(r *http.Request, name string) (*sessions.Session, error) {
+	return sessions.GetRegistry(r).Get(s, name)
+}
+
+func (s *ValkeyStore) New(r *http.Request, name string) (*sessions.Session, error) {
+	session := sessions.NewSession(s, name)
+	opts := *s.options
+	session.Options = &opts
+	session.IsNew = true
+
+	c, err := r.Cookie(name)
+	if err != nil {
+		return session, nil
+	}
+
+	var sessionID string
+	err = securecookie.DecodeMulti(name, c.Value, &sessionID, s.codecs...)
+	if err != nil {
+		return session, nil
+	}
+
+	session.ID = sessionID
+	val, err := s.client.Get(r.Context(), "session:"+sessionID).Result()
+	if err != nil {
+		return session, nil
+	}
+
+	var tempValues map[string]interface{}
+	if err := json.Unmarshal([]byte(val), &tempValues); err != nil {
+		return session, nil
+	}
+
+	values := make(map[interface{}]interface{})
+	for k, v := range tempValues {
+		if k == "user_id" {
+			if f, ok := v.(float64); ok {
+				values[k] = int(f)
+				continue
+			}
+		}
+		values[k] = v
+	}
+
+	session.Values = values
+	session.IsNew = false
+	return session, nil
+}
+
+func (s *ValkeyStore) Save(r *http.Request, w http.ResponseWriter, session *sessions.Session) error {
+	if session.Options.MaxAge < 0 {
+		if session.ID != "" {
+			s.client.Del(r.Context(), "session:"+session.ID)
+		}
+		http.SetCookie(w, sessions.NewCookie(session.Name(), "", session.Options))
+		return nil
+	}
+
+	if session.ID == "" {
+		session.ID = hex.EncodeToString(securecookie.GenerateRandomKey(32))
+	}
+
+	tempValues := make(map[string]interface{})
+	for k, v := range session.Values {
+		if sk, ok := k.(string); ok {
+			tempValues[sk] = v
+		}
+	}
+
+	val, err := json.Marshal(tempValues)
+	if err != nil {
+		return err
+	}
+
+	age := session.Options.MaxAge
+	if age == 0 {
+		age = s.options.MaxAge
+	}
+
+	err = s.client.Set(r.Context(), "session:"+session.ID, val, time.Duration(age)*time.Second).Err()
+	if err != nil {
+		return err
+	}
+
+	encoded, err := securecookie.EncodeMulti(session.Name(), session.ID, s.codecs...)
+	if err != nil {
+		return err
+	}
+
+	http.SetCookie(w, sessions.NewCookie(session.Name(), encoded, session.Options))
+	return nil
 }

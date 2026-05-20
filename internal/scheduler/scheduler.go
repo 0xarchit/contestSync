@@ -31,10 +31,26 @@ func (s *Scheduler) Start() {
 	s.Cron.AddFunc("@daily", func() {
 		s.SyncAllUsers(context.Background())
 	})
+	s.Cron.AddFunc("@daily", func() {
+		s.PruneOldData(context.Background())
+	})
 	s.Cron.AddFunc("@every 15m", func() {
 		s.CleanupOAuthStates(context.Background())
 	})
 	s.Cron.Start()
+}
+
+func (s *Scheduler) PruneOldData(ctx context.Context) {
+	slog.Info("starting data pruning task")
+	// Delete contests older than 30 days
+	res, err := s.DB.Exec(ctx, "DELETE FROM contests WHERE end_time < NOW() - INTERVAL '30 days'")
+	if err != nil {
+		slog.Error("failed to prune old contests", "error", err)
+	} else {
+		slog.Info("pruned old contests", "count", res.RowsAffected())
+	}
+
+	// synced_events will be pruned via ON DELETE CASCADE on contest_id
 }
 
 func (s *Scheduler) CleanupOAuthStates(ctx context.Context) {

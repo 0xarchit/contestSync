@@ -21,6 +21,7 @@
   --platform-atcoder:    #00c8ff;
   --platform-hackerrank: #2ec866;
   --platform-gfg:        #2f8d46;
+  --platform-code360:    #f26622;
   --t-hero:  clamp(3rem,8vw,7rem);
   --t-h2:    clamp(2rem,4vw,3.5rem);
   --t-h3:    clamp(1.1rem,2vw,1.5rem);
@@ -81,6 +82,7 @@ section{padding-block:clamp(5rem,12vh,9rem);position:relative}
 .dot.leetcode{background:var(--platform-leetcode)}
 .dot.codeforces{background:var(--platform-codeforces)}
 .dot.atcoder{background:var(--platform-atcoder)}
+.dot.code360{background:var(--platform-code360)}
 .card-info{display:flex;flex-direction:column;gap:.25rem}
 .card-info .platform{font-size:var(--t-label);color:var(--text-dim);text-transform:uppercase}
 .card-info .title{font-weight:500}

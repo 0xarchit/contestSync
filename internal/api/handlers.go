@@ -20,7 +20,7 @@ import (
 
 type Handlers struct {
 	DB            *pgxpool.Pool
-	SessionStore  *sessions.CookieStore
+	SessionStore  sessions.Store
 	AuthProvider  *auth.Provider
 	SessionSecret []byte
 	Queue         *queue.Queue
@@ -196,7 +196,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		Platforms []string `json:"platforms"`
 	}
 	var calendarID sql.NullString
-	err := h.DB.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id FROM users WHERE id = $1", userID).Scan(&user.ID, &user.GoogleID, &user.Email, &calendarID)
+	err := h.DB.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms FROM users WHERE id = $1", userID).Scan(&user.ID, &user.GoogleID, &user.Email, &calendarID, &user.UseDedicated, &user.Platforms)
 	if err != nil {
 		slog.Error("failed to fetch user", "user_id", userID, "error", err)
 		http.Error(w, `{"error":"user not found"}`, http.StatusNotFound)
@@ -208,18 +208,6 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		user.CalendarID = calendarID.String
 	}
 
-	// Fetch existing platform preferences
-	rows, err := h.DB.Query(r.Context(), "SELECT platform FROM user_platform_preferences WHERE user_id = $1", userID)
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var p string
-			if err := rows.Scan(&p); err == nil {
-				user.Platforms = append(user.Platforms, p)
-			}
-		}
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(user)
 }
@@ -227,8 +215,8 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(ContextKeyUserID).(int)
 
-	// Since we have ON DELETE CASCADE in the schema,
-	// deleting the user will remove preferences and synced_events entries automatically.
+	// Since we have ON DELETE CASCADE in the schema, 
+	// deleting the user will remove synced_events entries automatically.
 	_, err := h.DB.Exec(r.Context(), "DELETE FROM users WHERE id = $1", userID)
 	if err != nil {
 		slog.Error("failed to delete user account", "user_id", userID, "error", err)
@@ -248,7 +236,7 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetPlatforms(w http.ResponseWriter, r *http.Request) {
-	platforms := []string{"leetcode", "codeforces", "codechef", "atcoder", "hackerrank", "geeksforgeeks"}
+	platforms := []string{"leetcode", "codeforces", "codechef", "atcoder", "hackerrank", "geeksforgeeks", "code360"}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string][]string{"platforms": platforms})
 }
@@ -256,15 +244,15 @@ func (h *Handlers) GetPlatforms(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(ContextKeyUserID).(int)
 	var req struct {
-		Platforms []string `json:"platforms"`
+		Platforms    []string `json:"platforms"`
+		UseDedicated bool     `json:"use_dedicated"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
 		return
 	}
 
-	// Validate platforms
-	allowed := map[string]bool{"leetcode": true, "codeforces": true, "codechef": true, "atcoder": true, "hackerrank": true, "geeksforgeeks": true}
+	allowed := map[string]bool{"leetcode": true, "codeforces": true, "codechef": true, "atcoder": true, "hackerrank": true, "geeksforgeeks": true, "code360": true}
 	for _, p := range req.Platforms {
 		if !allowed[p] {
 			http.Error(w, `{"error":"invalid platform"}`, http.StatusBadRequest)
@@ -272,28 +260,9 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tx, err := h.DB.Begin(r.Context())
+	_, err := h.DB.Exec(r.Context(), "UPDATE users SET platforms = $1, use_dedicated = $2 WHERE id = $3", req.Platforms, req.UseDedicated, userID)
 	if err != nil {
-		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback(r.Context())
-
-	_, err = tx.Exec(r.Context(), "DELETE FROM user_platform_preferences WHERE user_id = $1", userID)
-	if err != nil {
-		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
-		return
-	}
-
-	for _, p := range req.Platforms {
-		_, err = tx.Exec(r.Context(), "INSERT INTO user_platform_preferences (user_id, platform) VALUES ($1, $2)", userID, p)
-		if err != nil {
-			http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
-			return
-		}
-	}
-
-	if err := tx.Commit(r.Context()); err != nil {
+		slog.Error("failed to update user platforms", "user_id", userID, "error", err)
 		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
 		return
 	}
@@ -301,7 +270,6 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
-
 func generateRandomString(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {

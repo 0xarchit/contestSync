@@ -64,6 +64,10 @@ func fetchJSON(method, url string, body []byte) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP request failed with status %d", resp.StatusCode)
+	}
+
 	return io.ReadAll(resp.Body)
 }
 
@@ -80,6 +84,10 @@ func fetchPage(url string) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("HTTP request failed with status %d", resp.StatusCode)
+	}
 
 	return io.ReadAll(resp.Body)
 }
