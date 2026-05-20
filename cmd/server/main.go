@@ -19,10 +19,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/gorilla/sessions"
+	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 )
 
 func main() {
+	godotenv.Load()
+
 	cfg := config.Load()
 
 	if len(cfg.EncryptionKey) != 32 {
