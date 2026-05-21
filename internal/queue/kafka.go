@@ -77,7 +77,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, err
 		Async: false,
 	}
 
-	_ = ensureTopics(tlsConfig, broker)
+	_ = ensureTopics(cfg, tlsConfig, broker)
 
 	return &Queue{
 		Producer:    writer,
@@ -88,7 +88,7 @@ func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, err
 	}, nil
 }
 
-func ensureTopics(tlsConfig *tls.Config, broker string) error {
+func ensureTopics(cfg *config.Config, tlsConfig *tls.Config, broker string) error {
 	dialer := &kafka.Dialer{
 		Timeout:   10 * time.Second,
 		DualStack: true,
@@ -103,14 +103,14 @@ func ensureTopics(tlsConfig *tls.Config, broker string) error {
 	defer conn.Close()
 	topicConfigs := []kafka.TopicConfig{
 		{Topic: TopicExtraction, NumPartitions: 1, ReplicationFactor: 3},
-		{Topic: TopicSync, NumPartitions: 1, ReplicationFactor: 3},
+		{Topic: TopicSync, NumPartitions: cfg.KafkaPartitions, ReplicationFactor: 3},
 		{Topic: TopicHealth, NumPartitions: 1, ReplicationFactor: 3},
 	}
 	err = conn.CreateTopics(topicConfigs...)
 	if err != nil {
 		topicConfigs1 := []kafka.TopicConfig{
 			{Topic: TopicExtraction, NumPartitions: 1, ReplicationFactor: 1},
-			{Topic: TopicSync, NumPartitions: 1, ReplicationFactor: 1},
+			{Topic: TopicSync, NumPartitions: cfg.KafkaPartitions, ReplicationFactor: 1},
 			{Topic: TopicHealth, NumPartitions: 1, ReplicationFactor: 1},
 		}
 		err2 := conn.CreateTopics(topicConfigs1...)
@@ -237,10 +237,15 @@ func (q *Queue) StartConsumers(ctx context.Context, cfg *config.Config) {
 
 func (q *Queue) consumeExtractionInMemory(ctx context.Context) {
 	slog.Info("started in-memory extraction consumer")
+	sem := make(chan struct{}, 3)
 	for {
 		select {
 		case platform := <-q.extractionCh:
-			q.handleExtraction(ctx, platform)
+			sem <- struct{}{}
+			go func(plat string) {
+				defer func() { <-sem }()
+				q.handleExtraction(ctx, plat)
+			}(platform)
 		case <-ctx.Done():
 			return
 		}
@@ -249,12 +254,17 @@ func (q *Queue) consumeExtractionInMemory(ctx context.Context) {
 
 func (q *Queue) consumeSyncInMemory(ctx context.Context) {
 	slog.Info("started in-memory sync consumer")
+	sem := make(chan struct{}, 10)
 	for {
 		select {
 		case userID := <-q.syncCh:
-			if err := q.Syncer.SyncUser(ctx, userID); err != nil {
-				slog.Error("sync failed in in-memory consumer", "user_id", userID, "error", err)
-			}
+			sem <- struct{}{}
+			go func(uid int) {
+				defer func() { <-sem }()
+				if err := q.Syncer.SyncUser(ctx, uid); err != nil {
+					slog.Error("sync failed in in-memory consumer", "user_id", uid, "error", err)
+				}
+			}(userID)
 		case <-ctx.Done():
 			return
 		}
@@ -277,6 +287,7 @@ func (q *Queue) consumeExtraction(ctx context.Context, cfg *config.Config) {
 	defer r.Close()
 
 	slog.Info("started extraction consumer")
+	sem := make(chan struct{}, 3)
 
 	for {
 		m, err := r.ReadMessage(ctx)
@@ -294,7 +305,11 @@ func (q *Queue) consumeExtraction(ctx context.Context, cfg *config.Config) {
 			continue
 		}
 
-		q.handleExtraction(ctx, task.Platform)
+		sem <- struct{}{}
+		go func(plat string) {
+			defer func() { <-sem }()
+			q.handleExtraction(ctx, plat)
+		}(task.Platform)
 	}
 }
 
@@ -314,6 +329,7 @@ func (q *Queue) consumeSync(ctx context.Context, cfg *config.Config) {
 	defer r.Close()
 
 	slog.Info("started sync consumer")
+	sem := make(chan struct{}, 10)
 
 	for {
 		m, err := r.ReadMessage(ctx)
@@ -331,9 +347,13 @@ func (q *Queue) consumeSync(ctx context.Context, cfg *config.Config) {
 			continue
 		}
 
-		if err := q.Syncer.SyncUser(ctx, task.UserID); err != nil {
-			slog.Error("sync failed in consumer", "user_id", task.UserID, "error", err)
-		}
+		sem <- struct{}{}
+		go func(uid int) {
+			defer func() { <-sem }()
+			if err := q.Syncer.SyncUser(ctx, uid); err != nil {
+				slog.Error("sync failed in consumer", "user_id", uid, "error", err)
+			}
+		}(task.UserID)
 	}
 }
 

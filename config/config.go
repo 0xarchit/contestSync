@@ -25,6 +25,7 @@ type Config struct {
 	KafkaAccessKey  []byte
 	KafkaAccessCert []byte
 	KafkaCACert     []byte
+	KafkaPartitions int
 	ValkeyURI       string
 }
 
@@ -37,6 +38,11 @@ func Load() *Config {
 	kafkaAccessKey := []byte(os.Getenv("KAFKA_ACCESS_KEY"))
 	kafkaAccessCert := []byte(os.Getenv("KAFKA_ACCESS_CERTIFICATE"))
 	kafkaCACert := []byte(os.Getenv("KAFKA_CA_CERTIFICATE"))
+
+	kafkaPartitions, err := strconv.Atoi(os.Getenv("KAFKA_PARTITIONS"))
+	if err != nil || kafkaPartitions <= 0 {
+		kafkaPartitions = 4
+	}
 
 	connLimit, _ := strconv.Atoi(os.Getenv("CONNECTION_LIMIT"))
 	if connLimit == 0 {
@@ -76,6 +82,7 @@ func Load() *Config {
 		KafkaAccessKey:  kafkaAccessKey,
 		KafkaAccessCert: kafkaAccessCert,
 		KafkaCACert:     kafkaCACert,
+		KafkaPartitions: kafkaPartitions,
 		ValkeyURI:       os.Getenv("VALKEY_URI"),
 	}
 }
