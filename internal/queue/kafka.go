@@ -76,6 +76,8 @@ func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, err
 		Async: false,
 	}
 
+	_ = ensureTopics(tlsConfig, broker)
+
 	return &Queue{
 		Producer:    writer,
 		DB:          db,
@@ -83,6 +85,39 @@ func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, err
 		kafkaBroker: broker,
 		kafkaTLS:    tlsConfig,
 	}, nil
+}
+
+func ensureTopics(tlsConfig *tls.Config, broker string) error {
+	dialer := &kafka.Dialer{
+		Timeout:   10 * time.Second,
+		DualStack: true,
+		TLS:       tlsConfig,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	conn, err := dialer.DialContext(ctx, "tcp", broker)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	topicConfigs := []kafka.TopicConfig{
+		{Topic: TopicExtraction, NumPartitions: 1, ReplicationFactor: 3},
+		{Topic: TopicSync, NumPartitions: 1, ReplicationFactor: 3},
+	}
+	err = conn.CreateTopics(topicConfigs...)
+	if err != nil {
+		topicConfigs1 := []kafka.TopicConfig{
+			{Topic: TopicExtraction, NumPartitions: 1, ReplicationFactor: 1},
+			{Topic: TopicSync, NumPartitions: 1, ReplicationFactor: 1},
+		}
+		err2 := conn.CreateTopics(topicConfigs1...)
+		if err2 != nil {
+			slog.Warn("could not auto-create kafka topics", "err", err2)
+		}
+	} else {
+		slog.Info("successfully created kafka topics")
+	}
+	return nil
 }
 
 func (q *Queue) Health(ctx context.Context) error {
