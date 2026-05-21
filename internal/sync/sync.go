@@ -2,8 +2,13 @@ package sync
 
 import (
 	"context"
+	"crypto/md5"
 	"database/sql"
+	"encoding/base32"
+	"fmt"
 	"log/slog"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/0xarchit/contestsync/internal/auth"
@@ -11,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -109,7 +115,12 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 			continue
 		}
 
+		hasher := md5.New()
+		hasher.Write([]byte(fmt.Sprintf("%d_%s", userID, c.ID)))
+		detID := strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(hasher.Sum(nil)))
+
 		event := &calendar.Event{
+			Id:          detID,
 			Summary:     "[" + c.Platform + "] " + c.Name,
 			Description: "Platform: " + c.Platform + "\nURL: " + c.URL + "\n\nSynced by ContestSync",
 			Location:    c.URL,
@@ -134,11 +145,18 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 
 		res, err := srv.Events.Insert(user.CalendarID, event).Context(ctx).Do()
 		if err != nil {
+			if gErr, ok := err.(*googleapi.Error); ok && gErr.Code == http.StatusConflict {
+				_, err = s.DB.Exec(ctx, "INSERT INTO synced_events (user_id, contest_id, google_event_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", userID, c.ID, detID)
+				if err != nil {
+					slog.Error("failed to reconcile synced event on conflict", "user_id", userID, "contest_id", c.ID, "error", err)
+				}
+				continue
+			}
 			slog.Error("failed to insert event", "user_id", userID, "contest_id", c.ID, "error", err)
 			continue
 		}
 
-		_, err = s.DB.Exec(ctx, "INSERT INTO synced_events (user_id, contest_id, google_event_id) VALUES ($1, $2, $3)", userID, c.ID, res.Id)
+		_, err = s.DB.Exec(ctx, "INSERT INTO synced_events (user_id, contest_id, google_event_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", userID, c.ID, res.Id)
 		if err != nil {
 			slog.Error("failed to save synced event", "user_id", userID, "contest_id", c.ID, "error", err)
 		}
