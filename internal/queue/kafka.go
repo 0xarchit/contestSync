@@ -20,6 +20,7 @@ import (
 const (
 	TopicExtraction = "extraction-tasks"
 	TopicSync       = "sync-tasks"
+	TopicHealth     = "health-check-tasks"
 )
 
 type TaskType string
@@ -103,12 +104,14 @@ func ensureTopics(tlsConfig *tls.Config, broker string) error {
 	topicConfigs := []kafka.TopicConfig{
 		{Topic: TopicExtraction, NumPartitions: 1, ReplicationFactor: 3},
 		{Topic: TopicSync, NumPartitions: 1, ReplicationFactor: 3},
+		{Topic: TopicHealth, NumPartitions: 1, ReplicationFactor: 3},
 	}
 	err = conn.CreateTopics(topicConfigs...)
 	if err != nil {
 		topicConfigs1 := []kafka.TopicConfig{
 			{Topic: TopicExtraction, NumPartitions: 1, ReplicationFactor: 1},
 			{Topic: TopicSync, NumPartitions: 1, ReplicationFactor: 1},
+			{Topic: TopicHealth, NumPartitions: 1, ReplicationFactor: 1},
 		}
 		err2 := conn.CreateTopics(topicConfigs1...)
 		if err2 != nil {
@@ -124,42 +127,38 @@ func (q *Queue) Health(ctx context.Context) error {
 	if q.useInMemory {
 		return nil
 	}
-
+	dialer := &kafka.Dialer{
+		Timeout: 10 * time.Second,
+		TLS:     q.kafkaTLS,
+	}
+	conn, err := dialer.DialLeader(ctx, "tcp", q.kafkaBroker, TopicHealth, 0)
+	if err != nil {
+		return fmt.Errorf("failed to dial leader: %w", err)
+	}
+	defer conn.Close()
+	_, lastOffset, err := conn.ReadOffsets()
+	if err != nil {
+		return fmt.Errorf("failed to read offsets: %w", err)
+	}
 	probe := fmt.Sprintf("health-probe-%d", time.Now().UnixNano())
-
-	err := q.Producer.WriteMessages(ctx, kafka.Message{
-		Topic: TopicExtraction,
-		Key:   []byte("__health__"),
+	_, err = conn.WriteMessages(kafka.Message{
 		Value: []byte(probe),
 	})
 	if err != nil {
-		return fmt.Errorf("kafka publish failed: %w", err)
+		return fmt.Errorf("failed to write messages: %w", err)
 	}
-
-	dialer := &kafka.Dialer{TLS: q.kafkaTLS}
-	r := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   []string{q.kafkaBroker},
-		Topic:     TopicExtraction,
-		GroupID:   "health-check-group",
-		Dialer:    dialer,
-		MaxWait:   2 * time.Second,
-		MinBytes:  1,
-		MaxBytes:  1024,
-	})
-	defer r.Close()
-
-	readCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
-	defer cancel()
-
-	for {
-		m, err := r.ReadMessage(readCtx)
-		if err != nil {
-			return fmt.Errorf("kafka consume failed: %w", err)
-		}
-		if string(m.Value) == probe {
-			return nil
-		}
+	_, err = conn.Seek(lastOffset, kafka.SeekAbsolute)
+	if err != nil {
+		return fmt.Errorf("failed to seek offset: %w", err)
 	}
+	m, err := conn.ReadMessage(1024)
+	if err != nil {
+		return fmt.Errorf("failed to read message: %w", err)
+	}
+	if string(m.Value) != probe {
+		return fmt.Errorf("read unexpected message: expected %s, got %s", probe, string(m.Value))
+	}
+	return nil
 }
 
 func createTLSConfig(cfg *config.Config) (*tls.Config, error) {
