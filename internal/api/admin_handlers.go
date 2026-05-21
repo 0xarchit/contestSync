@@ -25,6 +25,10 @@ type AdminHandlers struct {
 
 func (h *AdminHandlers) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	pass := r.Header.Get("X-Admin-Password")
+	if len(pass) > 256 {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return false
+	}
 	if h.AdminPassword == "" || subtle.ConstantTimeCompare([]byte(pass), []byte(h.AdminPassword)) != 1 {
 		slog.Warn("unauthorized admin attempt", "ip", r.RemoteAddr, "path", r.URL.Path)
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)

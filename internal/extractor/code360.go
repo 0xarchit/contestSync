@@ -14,11 +14,11 @@ func FetchCode360Contests() ([]Contest, error) {
 	var data struct {
 		Data struct {
 			Events []struct {
-				Name     string  `json:"name"`
-				Slug     string  `json:"slug"`
-				RegStart float64 `json:"registration_start_time"`
-				RegEnd   float64 `json:"registration_end_time"`
-				EventEnd float64 `json:"event_end_time"`
+				Name       string  `json:"name"`
+				Slug       string  `json:"slug"`
+				RegEnd     float64 `json:"registration_end_time"`
+				EventStart float64 `json:"event_start_time"`
+				EventEnd   float64 `json:"event_end_time"`
 			} `json:"events"`
 		} `json:"data"`
 	}
@@ -35,12 +35,12 @@ func FetchCode360Contests() ([]Contest, error) {
 
 		url := "https://www.naukri.com/code360/contests/" + e.Slug
 		contests = append(contests, Contest{
-			ID:        GenerateContestID("code360", int64(e.RegStart)),
+			ID:        GenerateContestID("code360", int64(e.EventStart)),
 			Name:      e.Name,
 			URL:       url,
-			StartTime: int64(e.RegStart),
+			StartTime: int64(e.EventStart),
 			EndTime:   int64(e.EventEnd),
-			Duration:  int64(e.EventEnd - e.RegStart),
+			Duration:  int64(e.EventEnd - e.EventStart),
 			Platform:  "code360",
 		})
 	}

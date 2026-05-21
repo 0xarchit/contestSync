@@ -144,11 +144,11 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		session, _ = h.SessionStore.New(r, "session")
 	}
 
-	// Regenerate session to prevent fixation
 	session.Options.MaxAge = -1
 	session.Save(r, w)
 
 	session, _ = h.SessionStore.New(r, "session")
+	session.ID = ""
 	session.Values["user_id"] = userID
 
 	csrfToken, err := generateRandomString(32)
@@ -170,16 +170,6 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to queue initial sync", "user_id", userID, "error", err)
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "csrf_token",
-		Value:    csrfToken,
-		Path:     "/",
-		HttpOnly: false,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400 * 7,
-	})
-
 	http.Redirect(w, r, "/preferences.html", http.StatusSeeOther)
 }
 
@@ -194,6 +184,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	var user struct {
 		models.User
 		Platforms []string `json:"platforms"`
+		CSRFToken string   `json:"csrf_token"`
 	}
 	var calendarID sql.NullString
 	err := h.DB.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms FROM users WHERE id = $1", userID).Scan(&user.ID, &user.GoogleID, &user.Email, &calendarID, &user.UseDedicated, &user.Platforms)
@@ -206,6 +197,13 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	user.CalendarID = ""
 	if calendarID.Valid {
 		user.CalendarID = calendarID.String
+	}
+
+	session, err := h.SessionStore.Get(r, "session")
+	if err == nil {
+		if csrf, ok := session.Values["csrf_token"].(string); ok {
+			user.CSRFToken = csrf
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -247,6 +245,7 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 		Platforms    []string `json:"platforms"`
 		UseDedicated bool     `json:"use_dedicated"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
 		return

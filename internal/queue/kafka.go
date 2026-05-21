@@ -394,3 +394,10 @@ func (q *Queue) handleExtraction(ctx context.Context, platform string) {
 		}
 	}
 }
+
+func (q *Queue) Close() error {
+	if q.Producer != nil {
+		return q.Producer.Close()
+	}
+	return nil
+}
