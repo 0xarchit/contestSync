@@ -1,4 +1,5 @@
 let lenis;
+let csrfToken = '';
 
 function initApp() {
     console.log('ContestSync: Initializing App...');
@@ -185,6 +186,7 @@ async function initPreferences() {
         let meRes = await fetch('/me', { credentials: 'same-origin' });
         if (meRes.ok) {
             let me = await meRes.json();
+            csrfToken = me.csrf_token || '';
             let emailEl = document.getElementById('user-email');
             if (emailEl && me.email) emailEl.textContent = me.email;
             existingPlatforms = me.platforms || [];
@@ -307,8 +309,7 @@ async function securePost(url, body) {
 }
 
 function getCSRFToken() {
-    let m = document.cookie.split('; ').find(r => r.trim().startsWith('csrf_token='));
-    return m ? m.split('=')[1] : '';
+    return csrfToken;
 }
 
 function showSuccess() {

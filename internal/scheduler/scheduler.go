@@ -86,3 +86,7 @@ func (s *Scheduler) RunExtraction(ctx context.Context) {
 		}
 	}
 }
+
+func (s *Scheduler) Stop() {
+	s.Cron.Stop()
+}

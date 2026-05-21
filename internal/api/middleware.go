@@ -277,19 +277,23 @@ func (s *ValkeyStore) New(r *http.Request, name string) (*sessions.Session, erro
 	}
 
 	var tempValues map[string]interface{}
-	if err := json.Unmarshal([]byte(val), &tempValues); err != nil {
+	d := json.NewDecoder(strings.NewReader(val))
+	d.UseNumber()
+	if err := d.Decode(&tempValues); err != nil {
 		return session, nil
 	}
 
 	values := make(map[interface{}]interface{})
 	for k, v := range tempValues {
-		if k == "user_id" {
-			if f, ok := v.(float64); ok {
-				values[k] = int(f)
-				continue
+		if jn, ok := v.(json.Number); ok {
+			if i64, err := jn.Int64(); err == nil {
+				values[k] = int(i64)
+			} else {
+				values[k] = v
 			}
+		} else {
+			values[k] = v
 		}
-		values[k] = v
 	}
 
 	session.Values = values
@@ -301,6 +305,7 @@ func (s *ValkeyStore) Save(r *http.Request, w http.ResponseWriter, session *sess
 	if session.Options.MaxAge < 0 {
 		if session.ID != "" {
 			s.client.Del(r.Context(), "session:"+session.ID)
+			session.ID = ""
 		}
 		http.SetCookie(w, sessions.NewCookie(session.Name(), "", session.Options))
 		return nil

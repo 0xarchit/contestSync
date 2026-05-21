@@ -6,6 +6,9 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/0xarchit/contestsync/config"
@@ -36,33 +39,19 @@ func main() {
 		log.Fatal("SESSION_SECRET must be configured and non-empty")
 	}
 
-	ctx := context.Background()
-	pool, err := db.Init(ctx, cfg.DatabaseURL, cfg.CACertificate, cfg.ConnectionLimit)
+	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+
+	pool, err := db.Init(shutdownCtx, cfg.DatabaseURL, cfg.CACertificate, cfg.ConnectionLimit)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer pool.Close()
 
-	_, err = pool.Exec(ctx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS use_dedicated BOOLEAN NOT NULL DEFAULT FALSE")
+	_, err = pool.Exec(shutdownCtx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS use_dedicated BOOLEAN NOT NULL DEFAULT FALSE")
 	if err != nil {
 		log.Fatalf("failed to run migrations: %v", err)
 	}
-
-	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				_, err := pool.Exec(context.Background(), "DELETE FROM contests WHERE end_time < NOW() - INTERVAL '30 days'")
-				if err != nil {
-					slog.Error("failed to cleanup old contests", "error", err)
-				}
-			}
-		}
-	}()
 
 	var valkeyClient *redis.Client
 	if cfg.ValkeyURI != "" {
@@ -71,10 +60,11 @@ func main() {
 			log.Fatalf("failed to parse VALKEY_URI: %v", err)
 		}
 		valkeyClient = redis.NewClient(opt)
-		if err := valkeyClient.Ping(ctx).Err(); err != nil {
+		if err := valkeyClient.Ping(shutdownCtx).Err(); err != nil {
 			log.Fatalf("failed to connect to Valkey: %v", err)
 		}
 		slog.Info("connected to Valkey successfully")
+		defer valkeyClient.Close()
 	}
 
 	var sessionStore sessions.Store
@@ -98,13 +88,15 @@ func main() {
 		DB:            pool,
 		AuthProvider:  authProvider,
 		SessionSecret: cfg.EncryptionKey,
+		Valkey:        valkeyClient,
 	}
 
 	q, err := queue.New(cfg, pool, syncer)
 	if err != nil {
 		log.Fatalf("failed to initialize kafka queue: %v", err)
 	}
-	q.StartConsumers(ctx, cfg)
+	defer q.Close()
+	q.StartConsumers(shutdownCtx, cfg)
 
 	handlers := &api.Handlers{
 		DB:            pool,
@@ -116,6 +108,8 @@ func main() {
 
 	sched := scheduler.New(pool, q)
 	sched.Start()
+	defer sched.Stop()
+
 	adminHandlers := &api.AdminHandlers{
 		Scheduler:     sched,
 		AdminPassword: cfg.AdminPassword,
@@ -160,8 +154,27 @@ func main() {
 	serverFS := http.FileServer(http.FS(staticSub))
 	r.Handle("/*", serverFS)
 
-	slog.Info("server starting", "port", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
-		log.Fatal(err)
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r,
 	}
+
+	go func() {
+		slog.Info("server starting", "port", cfg.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("failed to start server: %v", err)
+		}
+	}()
+
+	<-shutdownCtx.Done()
+	slog.Info("shutting down server gracefully")
+
+	shutdownTimeoutCtx, cancelTimeout := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelTimeout()
+
+	if err := srv.Shutdown(shutdownTimeoutCtx); err != nil {
+		slog.Error("server shutdown failed", "error", err)
+	}
+
+	slog.Info("server stopped")
 }

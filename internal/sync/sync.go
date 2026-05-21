@@ -9,11 +9,13 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/0xarchit/contestsync/internal/auth"
 	"github.com/0xarchit/contestsync/models"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/googleapi"
@@ -24,9 +26,28 @@ type Syncer struct {
 	DB            *pgxpool.Pool
 	AuthProvider  *auth.Provider
 	SessionSecret []byte
+	Valkey        *redis.Client
+	syncingUsers  sync.Map
 }
 
 func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
+	if s.Valkey != nil {
+		lockKey := fmt.Sprintf("lock:sync:%d", userID)
+		ok, err := s.Valkey.SetNX(ctx, lockKey, "1", 5*time.Minute).Result()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("user already syncing")
+		}
+		defer s.Valkey.Del(context.Background(), lockKey)
+	} else {
+		if _, loaded := s.syncingUsers.LoadOrStore(userID, true); loaded {
+			return fmt.Errorf("user already syncing")
+		}
+		defer s.syncingUsers.Delete(userID)
+	}
+
 	var user models.User
 	var encryptedRefreshToken string
 	var calendarID sql.NullString
@@ -143,7 +164,21 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 			Transparency: "opaque",
 		}
 
-		res, err := srv.Events.Insert(user.CalendarID, event).Context(ctx).Do()
+		var res *calendar.Event
+		var err error
+		for attempt := 1; attempt <= 3; attempt++ {
+			res, err = srv.Events.Insert(user.CalendarID, event).Context(ctx).Do()
+			if err == nil {
+				break
+			}
+			if gErr, ok := err.(*googleapi.Error); ok && gErr.Code == http.StatusConflict {
+				break
+			}
+			if attempt < 3 {
+				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+			}
+		}
+
 		if err != nil {
 			if gErr, ok := err.(*googleapi.Error); ok && gErr.Code == http.StatusConflict {
 				_, err = s.DB.Exec(ctx, "INSERT INTO synced_events (user_id, contest_id, google_event_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", userID, c.ID, detID)
