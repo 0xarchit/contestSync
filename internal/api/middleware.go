@@ -1,6 +1,7 @@
 package api
 
 import (
+	"container/list"
 	"context"
 	"crypto/subtle"
 	"encoding/hex"
@@ -18,9 +19,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+type lruItem struct {
+	key   string
+	value []time.Time
+}
+
 type rateLimiter struct {
 	sync.Mutex
-	ips map[string][]time.Time
+	cap   int
+	evict *list.List
+	cache map[string]*list.Element
 }
 
 func (rl *rateLimiter) limit(ip string, max int, duration time.Duration) bool {
@@ -28,28 +36,49 @@ func (rl *rateLimiter) limit(ip string, max int, duration time.Duration) bool {
 	defer rl.Unlock()
 
 	now := time.Now()
-	if rl.ips == nil {
-		rl.ips = make(map[string][]time.Time)
+	if rl.cache == nil {
+		rl.cache = make(map[string]*list.Element)
+		rl.evict = list.New()
+		if rl.cap == 0 {
+			rl.cap = 10000
+		}
 	}
 
-	times := rl.ips[ip]
+	var item *lruItem
+	if elem, ok := rl.cache[ip]; ok {
+		rl.evict.MoveToFront(elem)
+		item = elem.Value.(*lruItem)
+	} else {
+		if rl.evict.Len() >= rl.cap {
+			back := rl.evict.Back()
+			if back != nil {
+				rl.evict.Remove(back)
+				backItem := back.Value.(*lruItem)
+				delete(rl.cache, backItem.key)
+			}
+		}
+		item = &lruItem{key: ip, value: []time.Time{}}
+		elem := rl.evict.PushFront(item)
+		rl.cache[ip] = elem
+	}
+
 	var filtered []time.Time
-	for _, t := range times {
+	for _, t := range item.value {
 		if now.Sub(t) < duration {
 			filtered = append(filtered, t)
 		}
 	}
 
 	if len(filtered) >= max {
-		rl.ips[ip] = filtered
+		item.value = filtered
 		return false
 	}
 
-	rl.ips[ip] = append(filtered, now)
+	item.value = append(filtered, now)
 	return true
 }
 
-var globalLimiter = &rateLimiter{}
+var globalLimiter = &rateLimiter{cap: 10000}
 
 func getClientIP(r *http.Request) string {
 	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
