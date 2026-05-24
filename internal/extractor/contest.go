@@ -42,6 +42,8 @@ var Fetchers = map[string]Fetcher{
 	"code360":       FetchCode360Contests,
 }
 
+var httpClient = &http.Client{Timeout: 10 * time.Second}
+
 func GenerateContestID(platform string, startTime int64) string {
 	return fmt.Sprintf("%s_%d", platform, startTime)
 }
@@ -59,7 +61,7 @@ func fetchJSON(method, url string, body []byte) ([]byte, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := httpClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -80,7 +82,7 @@ func fetchPage(url string) ([]byte, error) {
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := httpClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
