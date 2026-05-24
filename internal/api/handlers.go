@@ -8,9 +8,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/0xarchit/contestsync/internal/auth"
+	"github.com/0xarchit/contestsync/internal/extractor"
 	"github.com/0xarchit/contestsync/internal/queue"
 	"github.com/0xarchit/contestsync/models"
 	"github.com/gorilla/sessions"
@@ -214,9 +216,22 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(ContextKeyUserID).(int)
 
-	// Since we have ON DELETE CASCADE in the schema, 
-	// deleting the user will remove synced_events entries automatically.
-	_, err := h.DB.Exec(r.Context(), "DELETE FROM users WHERE id = $1", userID)
+	var encryptedRefreshToken string
+	err := h.DB.QueryRow(r.Context(), "SELECT refresh_token FROM users WHERE id = $1", userID).Scan(&encryptedRefreshToken)
+	if err == nil && encryptedRefreshToken != "" {
+		if refreshToken, decryptErr := auth.DecryptToken(encryptedRefreshToken, h.SessionSecret); decryptErr == nil && refreshToken != "" {
+			go func() {
+				resp, postErr := http.PostForm("https://oauth2.googleapis.com/revoke", url.Values{"token": {refreshToken}})
+				if postErr == nil {
+					resp.Body.Close()
+				} else {
+					slog.Error("failed to revoke oauth token", "error", postErr)
+				}
+			}()
+		}
+	}
+
+	_, err = h.DB.Exec(r.Context(), "DELETE FROM users WHERE id = $1", userID)
 	if err != nil {
 		slog.Error("failed to delete user account", "user_id", userID, "error", err)
 		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
@@ -236,9 +251,8 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetPlatforms(w http.ResponseWriter, r *http.Request) {
-	platforms := []string{"leetcode", "codeforces", "codechef", "atcoder", "hackerrank", "geeksforgeeks", "code360"}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string][]string{"platforms": platforms})
+	json.NewEncoder(w).Encode(map[string][]string{"platforms": extractor.Platforms})
 }
 
 func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
@@ -253,7 +267,10 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowed := map[string]bool{"leetcode": true, "codeforces": true, "codechef": true, "atcoder": true, "hackerrank": true, "geeksforgeeks": true, "code360": true}
+	allowed := make(map[string]bool)
+	for _, p := range extractor.Platforms {
+		allowed[p] = true
+	}
 	for _, p := range req.Platforms {
 		if !allowed[p] {
 			http.Error(w, `{"error":"invalid platform"}`, http.StatusBadRequest)

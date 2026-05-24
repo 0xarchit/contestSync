@@ -151,6 +151,8 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 		requestID := uuid.New().String()
 		w.Header().Set("X-Request-Id", requestID)
 		ctx := context.WithValue(r.Context(), ContextKeyRequestID, requestID)
+		logger := slog.With("request_id", requestID)
+		logger.Info("request started", "method", r.Method, "path", r.URL.Path)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
