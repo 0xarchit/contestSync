@@ -10,33 +10,33 @@ jobs:
     name: Generate Release Notes
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.x"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
-    - name: Generate AI release description
-      env:
-        GH_MODELS_API_KEY: ${{ secrets.GH_MODELS_API_KEY }}
-      run: |
-        python .github/scripts/generate_release_notes.py
+      - name: Generate AI release description
+        env:
+          GH_MODELS_API_KEY: ${{ secrets.GH_MODELS_API_KEY }}
+        run: |
+          python .github/scripts/generate_release_notes.py
 
-    - name: Upload release description artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: release_notes
-        path: release_notes.md
-        retention-days: 1
+      - name: Upload release description artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release_notes
+          path: release_notes.md
+          retention-days: 1
 
   build-and-release:
     name: Build and Release Assets
@@ -47,57 +47,57 @@ jobs:
       packages: write
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: "1.22"
-        cache: true
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
 
-    - name: Build Windows binaries
-      run: |
-        env GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o server.exe ./cmd/server/main.go
-        env GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o worker.exe ./cmd/worker/main.go
+      - name: Build Windows binaries
+        run: |
+          env GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o server.exe ./cmd/server/main.go
+          env GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o worker.exe ./cmd/worker/main.go
 
-    - name: Build Linux binaries (Dockerfile aligned)
-      run: |
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "netgo osusergo" -trimpath -buildvcs=false -ldflags="-s -w -extldflags -static" -o server ./cmd/server/main.go
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "netgo osusergo" -trimpath -buildvcs=false -ldflags="-s -w -extldflags -static" -o worker ./cmd/worker/main.go
+      - name: Build Linux binaries (Dockerfile aligned)
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "netgo osusergo" -trimpath -buildvcs=false -ldflags="-s -w -extldflags -static" -o server ./cmd/server/main.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "netgo osusergo" -trimpath -buildvcs=false -ldflags="-s -w -extldflags -static" -o worker ./cmd/worker/main.go
 
-    - name: Log in to GitHub Container Registry
-      run: |
-        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Build and Push Server Docker Image
-      run: |
-        REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-        docker build -f Dockerfile.server -t ghcr.io/${REPO_LOWER}/contestsync_server:${{ github.ref_name }} -t ghcr.io/${REPO_LOWER}/contestsync_server:latest .
-        docker push ghcr.io/${REPO_LOWER}/contestsync_server:${{ github.ref_name }}
-        docker push ghcr.io/${REPO_LOWER}/contestsync_server:latest
+      - name: Build and Push Server Docker Image
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker build -f Dockerfile.server -t ghcr.io/contestsync_server:${{ github.ref_name }} -t ghcr.io/contestsync_server:latest .
+          docker push ghcr.io/contestsync_server:${{ github.ref_name }}
+          docker push ghcr.io/contestsync_server:latest
 
-    - name: Build and Push Worker Docker Image
-      run: |
-        REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-        docker build -f Dockerfile.worker -t ghcr.io/${REPO_LOWER}/contestsync_worker:${{ github.ref_name }} -t ghcr.io/${REPO_LOWER}/contestsync_worker:latest .
-        docker push ghcr.io/${REPO_LOWER}/contestsync_worker:${{ github.ref_name }}
-        docker push ghcr.io/${REPO_LOWER}/contestsync_worker:latest
+      - name: Build and Push Worker Docker Image
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker build -f Dockerfile.worker -t ghcr.io/contestsync_worker:${{ github.ref_name }} -t ghcr.io/contestsync_worker:latest .
+          docker push ghcr.io/contestsync_worker:${{ github.ref_name }}
+          docker push ghcr.io/contestsync_worker:latest
 
-    - name: Download release description artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: release_notes
+      - name: Download release description artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release_notes
 
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        body_path: release_notes.md
-        files: |
-          server.exe
-          worker.exe
-          server
-          worker
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_notes.md
+          files: |
+            server.exe
+            worker.exe
+            server
+            worker
