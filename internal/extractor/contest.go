@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const maxResponseSize = 10 * 1024 * 1024
+
 type Contest struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -68,7 +70,7 @@ func fetchJSON(method, url string, body []byte) ([]byte, error) {
 		return nil, fmt.Errorf("HTTP request failed with status %d", resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 }
 
 func fetchPage(url string) ([]byte, error) {
@@ -89,5 +91,5 @@ func fetchPage(url string) ([]byte, error) {
 		return nil, fmt.Errorf("HTTP request failed with status %d", resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 }
