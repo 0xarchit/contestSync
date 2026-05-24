@@ -72,6 +72,8 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to parse VALKEY_URI: %v", err)
 		}
+		opt.ConnMaxIdleTime = 3 * time.Minute
+		opt.ConnMaxLifetime = 10 * time.Minute
 		valkeyClient = redis.NewClient(opt)
 		if err := valkeyClient.Ping(shutdownCtx).Err(); err != nil {
 			log.Fatalf("failed to connect to Valkey: %v", err)
