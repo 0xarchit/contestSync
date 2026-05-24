@@ -76,12 +76,12 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
+		Addr:    ":" + cfg.WorkerPort,
 		Handler: mux,
 	}
 
 	go func() {
-		slog.Info("worker starting", "port", cfg.Port)
+		slog.Info("worker starting", "port", cfg.WorkerPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("failed to start worker: %v", err)
 		}
