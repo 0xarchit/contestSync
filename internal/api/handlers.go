@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/0xarchit/contestsync/internal/auth"
+	"github.com/0xarchit/contestsync/internal/extractor"
 	"github.com/0xarchit/contestsync/internal/queue"
 	"github.com/0xarchit/contestsync/models"
 	"github.com/gorilla/sessions"
@@ -250,9 +251,8 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetPlatforms(w http.ResponseWriter, r *http.Request) {
-	platforms := []string{"leetcode", "codeforces", "codechef", "atcoder", "hackerrank", "geeksforgeeks", "code360"}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string][]string{"platforms": platforms})
+	json.NewEncoder(w).Encode(map[string][]string{"platforms": extractor.Platforms})
 }
 
 func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
@@ -267,7 +267,10 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowed := map[string]bool{"leetcode": true, "codeforces": true, "codechef": true, "atcoder": true, "hackerrank": true, "geeksforgeeks": true, "code360": true}
+	allowed := make(map[string]bool)
+	for _, p := range extractor.Platforms {
+		allowed[p] = true
+	}
 	for _, p := range req.Platforms {
 		if !allowed[p] {
 			http.Error(w, `{"error":"invalid platform"}`, http.StatusBadRequest)
