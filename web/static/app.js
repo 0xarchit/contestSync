@@ -350,6 +350,84 @@ function showSuccess() {
     });
 }
 
+function initGlobalInteractivity() {
+    const grid = document.createElement('div');
+    grid.className = 'hc-grid';
+    const vignette = document.createElement('div');
+    vignette.className = 'hc-vignette';
+    const scanlines = document.createElement('div');
+    scanlines.className = 'hc-scanlines';
+    document.body.prepend(scanlines);
+    document.body.prepend(vignette);
+    document.body.prepend(grid);
+
+    if (window.matchMedia('(hover: hover)').matches) {
+        const cursor = document.createElement('div');
+        cursor.className = 'custom-cursor';
+        const cursorDot = document.createElement('div');
+        cursorDot.className = 'custom-cursor-dot';
+        document.body.appendChild(cursor);
+        document.body.appendChild(cursorDot);
+
+        document.addEventListener('mousemove', e => {
+            gsap.to(cursor, { x: e.clientX, y: e.clientY, duration: 0.3, ease: 'power2.out' });
+            gsap.to(cursorDot, { x: e.clientX, y: e.clientY, duration: 0.05 });
+        });
+
+        document.addEventListener('mousedown', () => {
+            gsap.to(cursor, { scale: 0.8, duration: 0.1 });
+        });
+
+        document.addEventListener('mouseup', () => {
+            gsap.to(cursor, { scale: 1, duration: 0.15 });
+        });
+
+        const addHoverListeners = () => {
+            document.querySelectorAll('a, button, .btn, .platform-card, .platform-item, .custom-checkbox, input[type="checkbox"]').forEach(el => {
+                if (!el.dataset.cursorBound) {
+                    el.dataset.cursorBound = 'true';
+                    el.addEventListener('mouseenter', () => cursor.classList.add('hover'));
+                    el.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
+                }
+            });
+        };
+
+        addHoverListeners();
+        setInterval(addHoverListeners, 1000);
+    }
+
+    document.querySelectorAll('.platform-card').forEach(card => {
+        card.addEventListener('mousemove', e => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            card.style.setProperty('--mx', `${x}px`);
+            card.style.setProperty('--my', `${y}px`);
+
+            const tiltX = x - rect.width / 2;
+            const tiltY = y - rect.height / 2;
+            gsap.to(card, {
+                rotateY: tiltX * 0.08,
+                rotateX: -tiltY * 0.08,
+                duration: 0.3,
+                ease: 'power2.out'
+            });
+        });
+
+        card.addEventListener('mouseleave', () => {
+            gsap.to(card, {
+                rotateY: 0,
+                rotateX: 0,
+                duration: 0.5,
+                ease: 'power2.out'
+            });
+        });
+    });
+}
+
 window.addEventListener('load', () => {
-    setTimeout(initApp, 100);
+    setTimeout(() => {
+        initApp();
+        initGlobalInteractivity();
+    }, 100);
 });
