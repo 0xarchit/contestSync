@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/hex"
+	"log"
 	"os"
 	"strconv"
 )
@@ -49,9 +50,18 @@ func Load() *Config {
 		connLimit = 10
 	}
 
-	sessionSecret, _ := hex.DecodeString(os.Getenv("SESSION_SECRET"))
-	csrfSecret, _ := hex.DecodeString(os.Getenv("CSRF_SECRET"))
-	encryptionKey, _ := hex.DecodeString(os.Getenv("ENCRYPTION_KEY"))
+	sessionSecret, err := hex.DecodeString(os.Getenv("SESSION_SECRET"))
+	if err != nil {
+		log.Fatalf("failed to decode SESSION_SECRET: %v", err)
+	}
+	csrfSecret, err := hex.DecodeString(os.Getenv("CSRF_SECRET"))
+	if err != nil {
+		log.Fatalf("failed to decode CSRF_SECRET: %v", err)
+	}
+	encryptionKey, err := hex.DecodeString(os.Getenv("ENCRYPTION_KEY"))
+	if err != nil {
+		log.Fatalf("failed to decode ENCRYPTION_KEY: %v", err)
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
