@@ -245,7 +245,7 @@ func NewValkeyStore(client *redis.Client, env string, keyPairs ...[]byte) *Valke
 			Path:     "/",
 			MaxAge:   86400 * 7,
 			HttpOnly: true,
-			Secure:   env == "production",
+			Secure:   env != "development" && env != "dev" && env != "local",
 			SameSite: http.SameSiteLaxMode,
 		},
 	}
