@@ -48,11 +48,6 @@ func main() {
 	}
 	defer pool.Close()
 
-	_, err = pool.Exec(shutdownCtx, "ALTER TABLE users ADD COLUMN IF NOT EXISTS use_dedicated BOOLEAN NOT NULL DEFAULT FALSE")
-	if err != nil {
-		log.Fatalf("failed to run migrations: %v", err)
-	}
-
 	var valkeyClient *redis.Client
 	if cfg.ValkeyURI != "" {
 		opt, err := redis.ParseURL(cfg.ValkeyURI)
