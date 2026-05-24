@@ -151,9 +151,7 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 			continue
 		}
 
-		hasher := md5.New()
-		hasher.Write([]byte(fmt.Sprintf("%d_%s", userID, c.ID)))
-		detID := strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(hasher.Sum(nil)))
+		detID := GenerateDeterministicEventID(userID, c.ID)
 
 		event := &calendar.Event{
 			Id:          detID,
@@ -213,4 +211,10 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 	}
 
 	return nil
+}
+
+func GenerateDeterministicEventID(userID int, contestID string) string {
+	hasher := md5.New()
+	hasher.Write([]byte(fmt.Sprintf("%d_%s", userID, contestID)))
+	return strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(hasher.Sum(nil)))
 }
