@@ -8,7 +8,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <!-- Dependencies -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
     <script src="https://unpkg.com/lenis@1.1.14/dist/lenis.min.js"></script>
@@ -28,11 +27,12 @@
             <div class="hero-bg"></div>
             <div class="container hero-container">
                 <div class="hero-content">
+                    <p class="hc-prompt">contestsync --status</p>
                     <div class="badge">Automatic Contest Sync</div>
                     <h1 class="hero-title">
                         <span class="line">Never miss a</span>
                         <span class="line offset">coding contest</span>
-                        <span class="line underlined">again.</span>
+                        <span class="line underlined">again.<span class="hc-cursor"></span></span>
                     </h1>
                     <p class="hero-subtext">Connect Google. Pick your platforms. Contests appear in your calendar. That's it.</p>
                     <div class="hero-actions">
@@ -188,40 +188,53 @@
         <section class="calendar-preview" id="calendar">
             <div class="container">
                 <h2 class="section-title centered txt-reveal">This is what your week looks like.</h2>
-                <div class="fake-calendar">
-                    <div class="cal-header">
-                        <span>Week of May 19 – 25</span>
-                        <span>May ▾</span>
+                <div class="terminal-window">
+                    <div class="hc-chrome">
+                        <div class="dots">
+                            <span class="dot red"></span>
+                            <span class="dot yellow"></span>
+                            <span class="dot green"></span>
+                        </div>
+                        <div>~/contestsync · calendar · 80x24</div>
                     </div>
-                    <div class="cal-grid">
-                        <div class="cal-row labels">
-                            <div></div>
-                            <div>Mon 19</div>
-                            <div>Tue 20</div>
-                            <div>Wed 21</div>
-                            <div>Thu 22</div>
-                            <div>Fri 23</div>
+                    <div class="fake-calendar">
+                        <div class="cal-header">
+                            <span>Week of May 19 – 25</span>
+                            <span>May ▾</span>
                         </div>
-                        <div class="cal-row">
-                            <div class="time-lbl">2AM</div>
-                            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
-                        </div>
-                        <div class="cal-row">
-                            <div class="time-lbl">3AM</div>
-                            <div class="cell"><div class="event leetcode">LeetCode Weekly</div></div>
-                            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
-                        </div>
-                        <div class="cal-row">
-                            <div class="time-lbl">...</div>
-                            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
-                        </div>
-                        <div class="cal-row">
-                            <div class="time-lbl">8PM</div>
-                            <div class="cell"></div>
-                            <div class="cell"><div class="event codeforces">Codeforces Div 2</div></div>
-                            <div class="cell"></div>
-                            <div class="cell"><div class="event atcoder">AtCoder ABC 406</div></div>
-                            <div class="cell"></div>
+                        <div class="cal-grid">
+                            <div class="cal-row labels">
+                                <div></div>
+                                <div>Mon 19</div>
+                                <div>Tue 20</div>
+                                <div>Wed 21</div>
+                                <div>Thu 22</div>
+                                <div>Fri 23</div>
+                                <div>Sat 24</div>
+                                <div>Sun 25</div>
+                            </div>
+                            <div class="cal-row">
+                                <div class="time-lbl">2AM</div>
+                                <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+                            </div>
+                            <div class="cal-row">
+                                <div class="time-lbl">3AM</div>
+                                <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"><div class="event leetcode">LeetCode Weekly</div></div>
+                            </div>
+                            <div class="cal-row">
+                                <div class="time-lbl">...</div>
+                                <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+                            </div>
+                            <div class="cal-row">
+                                <div class="time-lbl">8PM</div>
+                                <div class="cell"></div>
+                                <div class="cell"><div class="event codeforces">Codeforces Div 2</div></div>
+                                <div class="cell"><div class="event codechef">CodeChef Starters</div></div>
+                                <div class="cell"></div>
+                                <div class="cell"><div class="event code360">Code360 Weekly</div></div>
+                                <div class="cell"><div class="event atcoder">AtCoder ABC 406</div></div>
+                                <div class="cell"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
