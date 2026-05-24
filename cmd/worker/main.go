@@ -25,6 +25,24 @@ func main() {
 
 	cfg := config.Load()
 
+	logLevelStr := os.Getenv("LOG_LEVEL")
+	level := slog.LevelInfo
+	if logLevelStr == "debug" || logLevelStr == "DEBUG" {
+		level = slog.LevelDebug
+	} else if logLevelStr == "warn" || logLevelStr == "WARN" {
+		level = slog.LevelWarn
+	} else if logLevelStr == "error" || logLevelStr == "ERROR" {
+		level = slog.LevelError
+	}
+
+	var handler slog.Handler
+	if cfg.Env == "production" {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+	}
+	slog.SetDefault(slog.New(handler))
+
 	if len(cfg.EncryptionKey) != 32 {
 		log.Fatal("ENCRYPTION_KEY must be exactly 32 bytes")
 	}
