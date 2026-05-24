@@ -33,6 +33,7 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"sync failed to queue"}`, http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "sync queued"})
 }
@@ -229,6 +230,7 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("user deleted account", "user_id", userID)
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
 }
@@ -266,6 +268,7 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
