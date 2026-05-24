@@ -171,5 +171,8 @@ func main() {
 		slog.Error("server shutdown failed", "error", err)
 	}
 
+	slog.Info("draining consumer queue")
+	q.Drain()
+
 	slog.Info("server stopped")
 }
