@@ -1,6 +1,8 @@
 # Binaries
 server
 server.exe
+worker
+worker.exe
 *.exe
 
 # Docker
