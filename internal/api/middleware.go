@@ -235,7 +235,7 @@ type ValkeyStore struct {
 	options *sessions.Options
 }
 
-func NewValkeyStore(client *redis.Client, keyPairs ...[]byte) *ValkeyStore {
+func NewValkeyStore(client *redis.Client, env string, keyPairs ...[]byte) *ValkeyStore {
 	return &ValkeyStore{
 		client: client,
 		codecs: securecookie.CodecsFromPairs(keyPairs...),
@@ -243,7 +243,7 @@ func NewValkeyStore(client *redis.Client, keyPairs ...[]byte) *ValkeyStore {
 			Path:     "/",
 			MaxAge:   86400 * 7,
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   env == "production",
 			SameSite: http.SameSiteLaxMode,
 		},
 	}
