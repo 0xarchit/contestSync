@@ -135,13 +135,18 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 	}
 	defer rows.Close()
 
+	var contests []models.Contest
 	for rows.Next() {
 		var c models.Contest
 		if err := rows.Scan(&c.ID, &c.Name, &c.URL, &c.StartTime, &c.EndTime, &c.Platform); err != nil {
 			slog.Error("failed to scan contest row", "error", err)
 			continue
 		}
+		contests = append(contests, c)
+	}
+	rows.Close()
 
+	for _, c := range contests {
 		if syncedMap[c.ID] {
 			continue
 		}
