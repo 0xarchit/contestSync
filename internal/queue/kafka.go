@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	stdSync "sync"
 	"time"
 
 	"github.com/0xarchit/contestsync/config"
@@ -47,6 +48,7 @@ type Queue struct {
 	syncCh       chan int
 	kafkaBroker  string
 	kafkaTLS     *tls.Config
+	wg           stdSync.WaitGroup
 }
 
 func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, error) {
@@ -242,7 +244,9 @@ func (q *Queue) consumeExtractionInMemory(ctx context.Context) {
 		select {
 		case platform := <-q.extractionCh:
 			sem <- struct{}{}
+			q.wg.Add(1)
 			go func(plat string) {
+				defer q.wg.Done()
 				defer func() { <-sem }()
 				q.handleExtraction(ctx, plat)
 			}(platform)
@@ -259,7 +263,9 @@ func (q *Queue) consumeSyncInMemory(ctx context.Context) {
 		select {
 		case userID := <-q.syncCh:
 			sem <- struct{}{}
+			q.wg.Add(1)
 			go func(uid int) {
+				defer q.wg.Done()
 				defer func() { <-sem }()
 				if err := q.Syncer.SyncUser(ctx, uid); err != nil {
 					slog.Error("sync failed in in-memory consumer", "user_id", uid, "error", err)
@@ -310,7 +316,9 @@ func (q *Queue) consumeExtraction(ctx context.Context, cfg *config.Config) {
 		}
 
 		sem <- struct{}{}
+		q.wg.Add(1)
 		go func(plat string) {
+			defer q.wg.Done()
 			defer func() { <-sem }()
 			q.handleExtraction(ctx, plat)
 		}(task.Platform)
@@ -356,13 +364,19 @@ func (q *Queue) consumeSync(ctx context.Context, cfg *config.Config) {
 		}
 
 		sem <- struct{}{}
+		q.wg.Add(1)
 		go func(uid int) {
+			defer q.wg.Done()
 			defer func() { <-sem }()
 			if err := q.Syncer.SyncUser(ctx, uid); err != nil {
 				slog.Error("sync failed in consumer", "user_id", uid, "error", err)
 			}
 		}(task.UserID)
 	}
+}
+
+func (q *Queue) Drain() {
+	q.wg.Wait()
 }
 
 func (q *Queue) handleExtraction(ctx context.Context, platform string) {

@@ -62,22 +62,33 @@ func (s *Scheduler) CleanupOAuthStates(ctx context.Context) {
 
 func (s *Scheduler) SyncAllUsers(ctx context.Context) {
 	slog.Info("queuing global sync for all users")
-	rows, err := s.DB.Query(ctx, "SELECT id FROM users")
-	if err != nil {
-		slog.Error("failed to fetch users for sync", "error", err)
-		return
-	}
-	defer rows.Close()
+	limit := 500
+	offset := 0
+	for {
+		rows, err := s.DB.Query(ctx, "SELECT id FROM users ORDER BY id LIMIT $1 OFFSET $2", limit, offset)
+		if err != nil {
+			slog.Error("failed to fetch users for sync", "error", err)
+			return
+		}
 
-	for rows.Next() {
-		var userID int
-		if err := rows.Scan(&userID); err != nil {
-			slog.Error("failed to scan user ID", "error", err)
-			continue
+		count := 0
+		for rows.Next() {
+			count++
+			var userID int
+			if err := rows.Scan(&userID); err != nil {
+				slog.Error("failed to scan user ID", "error", err)
+				continue
+			}
+			if err := s.Queue.PublishSyncTask(ctx, userID); err != nil {
+				slog.Error("failed to queue sync task", "user_id", userID, "error", err)
+			}
 		}
-		if err := s.Queue.PublishSyncTask(ctx, userID); err != nil {
-			slog.Error("failed to queue sync task", "user_id", userID, "error", err)
+		rows.Close()
+
+		if count < limit {
+			break
 		}
+		offset += limit
 	}
 }
 
