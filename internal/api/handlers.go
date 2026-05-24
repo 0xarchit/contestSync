@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/0xarchit/contestsync/internal/auth"
@@ -214,9 +215,22 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(ContextKeyUserID).(int)
 
-	// Since we have ON DELETE CASCADE in the schema, 
-	// deleting the user will remove synced_events entries automatically.
-	_, err := h.DB.Exec(r.Context(), "DELETE FROM users WHERE id = $1", userID)
+	var encryptedRefreshToken string
+	err := h.DB.QueryRow(r.Context(), "SELECT refresh_token FROM users WHERE id = $1", userID).Scan(&encryptedRefreshToken)
+	if err == nil && encryptedRefreshToken != "" {
+		if refreshToken, decryptErr := auth.DecryptToken(encryptedRefreshToken, h.SessionSecret); decryptErr == nil && refreshToken != "" {
+			go func() {
+				resp, postErr := http.PostForm("https://oauth2.googleapis.com/revoke", url.Values{"token": {refreshToken}})
+				if postErr == nil {
+					resp.Body.Close()
+				} else {
+					slog.Error("failed to revoke oauth token", "error", postErr)
+				}
+			}()
+		}
+	}
+
+	_, err = h.DB.Exec(r.Context(), "DELETE FROM users WHERE id = $1", userID)
 	if err != nil {
 		slog.Error("failed to delete user account", "user_id", userID, "error", err)
 		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
