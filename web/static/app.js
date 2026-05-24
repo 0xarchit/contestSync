@@ -173,6 +173,17 @@ function initApp() {
         });
     });
 
+    fetch('/me', { credentials: 'same-origin' })
+        .then(res => {
+            if (res.ok) {
+                document.querySelectorAll('a[href="/auth/google"]').forEach(btn => {
+                    btn.href = 'preferences.html';
+                    btn.innerHTML = 'Go to Preferences <svg class="icon-ext" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
+                });
+            }
+        })
+        .catch(err => console.error(err));
+
     ScrollTrigger.refresh();
 }
 
@@ -264,7 +275,6 @@ async function initPreferences() {
             });
         }
 
-        // Add Delete Account Button
         if (card) {
             let delBtn = document.createElement('button');
             delBtn.className = 'btn btn-ghost';

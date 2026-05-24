@@ -91,7 +91,7 @@ func main() {
 			Path:     "/",
 			MaxAge:   86400 * 7,
 			HttpOnly: true,
-			Secure:   cfg.Env == "production",
+			Secure:   cfg.Env != "development" && cfg.Env != "dev" && cfg.Env != "local",
 			SameSite: http.SameSiteLaxMode,
 		}
 		sessionStore = cookieStore
