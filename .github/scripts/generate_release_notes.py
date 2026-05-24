@@ -3,7 +3,7 @@ import subprocess
 import requests
 import time
 
-MODEL_URL = "https://models.github.io/inference/chat/completions"
+MODEL_URL = "https://models.github.ai/inference/chat/completions"
 MODEL_NAME = "gpt-4o-mini"
 MAX_CHARS_PER_CHUNK = 15000
 MAX_DIFF_CHARS = 1500
