@@ -40,7 +40,11 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 		if !ok {
 			return fmt.Errorf("user already syncing")
 		}
-		defer s.Valkey.Del(context.Background(), lockKey)
+		defer func() {
+			if err := s.Valkey.Del(context.Background(), lockKey).Err(); err != nil {
+				slog.Error("failed to release valkey lock", "user_id", userID, "error", err)
+			}
+		}()
 	} else {
 		if _, loaded := s.syncingUsers.LoadOrStore(userID, true); loaded {
 			return fmt.Errorf("user already syncing")

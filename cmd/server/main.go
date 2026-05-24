@@ -64,7 +64,7 @@ func main() {
 
 	var sessionStore sessions.Store
 	if valkeyClient != nil {
-		sessionStore = api.NewValkeyStore(valkeyClient, cfg.SessionSecret)
+		sessionStore = api.NewValkeyStore(valkeyClient, cfg.Env, cfg.SessionSecret)
 	} else {
 		cookieStore := sessions.NewCookieStore(cfg.SessionSecret)
 		cookieStore.Options = &sessions.Options{

@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"encoding/json"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -34,6 +35,10 @@ func FetchHackerrankContests() ([]Contest, error) {
 	for _, e := range data.Data.Events.Ongoing {
 		a := e.Attrs
 		if a.Name == "" || a.URL == "" || a.StartTime == "" || a.EndTime == "" {
+			continue
+		}
+		parsed, err := url.Parse(a.URL)
+		if err != nil || parsed.Scheme != "https" || !strings.HasSuffix(parsed.Host, "hackerrank.com") {
 			continue
 		}
 		startTime, err := parseISO(a.StartTime)

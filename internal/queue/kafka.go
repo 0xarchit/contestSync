@@ -272,7 +272,11 @@ func (q *Queue) consumeSyncInMemory(ctx context.Context) {
 }
 
 func (q *Queue) consumeExtraction(ctx context.Context, cfg *config.Config) {
-	tlsConfig, _ := createTLSConfig(cfg)
+	tlsConfig, err := createTLSConfig(cfg)
+	if err != nil {
+		slog.Error("failed to create TLS config", "error", err)
+		return
+	}
 	broker := fmt.Sprintf("%s:%s", cfg.KafkaHost, cfg.KafkaPort)
 
 	r := kafka.NewReader(kafka.ReaderConfig{
@@ -314,7 +318,11 @@ func (q *Queue) consumeExtraction(ctx context.Context, cfg *config.Config) {
 }
 
 func (q *Queue) consumeSync(ctx context.Context, cfg *config.Config) {
-	tlsConfig, _ := createTLSConfig(cfg)
+	tlsConfig, err := createTLSConfig(cfg)
+	if err != nil {
+		slog.Error("failed to create TLS config", "error", err)
+		return
+	}
 	broker := fmt.Sprintf("%s:%s", cfg.KafkaHost, cfg.KafkaPort)
 
 	r := kafka.NewReader(kafka.ReaderConfig{
