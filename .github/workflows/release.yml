@@ -75,17 +75,17 @@ jobs:
 
       - name: Build and Push Server Docker Image
         run: |
-          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          docker build -f Dockerfile.server -t ghcr.io/contestsync_server:${{ github.ref_name }} -t ghcr.io/contestsync_server:latest .
-          docker push ghcr.io/contestsync_server:${{ github.ref_name }}
-          docker push ghcr.io/contestsync_server:latest
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker build -f Dockerfile.server -t ghcr.io/${OWNER_LOWER}/contestsync_server:${{ github.ref_name }} -t ghcr.io/${OWNER_LOWER}/contestsync_server:latest .
+          docker push ghcr.io/${OWNER_LOWER}/contestsync_server:${{ github.ref_name }}
+          docker push ghcr.io/${OWNER_LOWER}/contestsync_server:latest
 
       - name: Build and Push Worker Docker Image
         run: |
-          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          docker build -f Dockerfile.worker -t ghcr.io/contestsync_worker:${{ github.ref_name }} -t ghcr.io/contestsync_worker:latest .
-          docker push ghcr.io/contestsync_worker:${{ github.ref_name }}
-          docker push ghcr.io/contestsync_worker:latest
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          docker build -f Dockerfile.worker -t ghcr.io/${OWNER_LOWER}/contestsync_worker:${{ github.ref_name }} -t ghcr.io/${OWNER_LOWER}/contestsync_worker:latest .
+          docker push ghcr.io/${OWNER_LOWER}/contestsync_worker:${{ github.ref_name }}
+          docker push ghcr.io/${OWNER_LOWER}/contestsync_worker:latest
 
       - name: Download release description artifact
         uses: actions/download-artifact@v4
