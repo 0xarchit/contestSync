@@ -71,7 +71,10 @@ func (s *Scheduler) SyncAllUsers(ctx context.Context) {
 
 	for rows.Next() {
 		var userID int
-		rows.Scan(&userID)
+		if err := rows.Scan(&userID); err != nil {
+			slog.Error("failed to scan user ID", "error", err)
+			continue
+		}
 		if err := s.Queue.PublishSyncTask(ctx, userID); err != nil {
 			slog.Error("failed to queue sync task", "user_id", userID, "error", err)
 		}

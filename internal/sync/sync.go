@@ -113,7 +113,10 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 		defer rows.Close()
 		for rows.Next() {
 			var cid string
-			rows.Scan(&cid)
+			if err := rows.Scan(&cid); err != nil {
+				slog.Error("failed to scan contest ID", "error", err)
+				continue
+			}
 			syncedMap[cid] = true
 		}
 	}
@@ -130,7 +133,10 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 
 	for rows.Next() {
 		var c models.Contest
-		rows.Scan(&c.ID, &c.Name, &c.URL, &c.StartTime, &c.EndTime, &c.Platform)
+		if err := rows.Scan(&c.ID, &c.Name, &c.URL, &c.StartTime, &c.EndTime, &c.Platform); err != nil {
+			slog.Error("failed to scan contest row", "error", err)
+			continue
+		}
 
 		if syncedMap[c.ID] {
 			continue
