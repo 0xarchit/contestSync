@@ -311,7 +311,11 @@ func (s *ValkeyStore) Save(r *http.Request, w http.ResponseWriter, session *sess
 			}
 			session.ID = ""
 		}
-		http.SetCookie(w, sessions.NewCookie(session.Name(), "", session.Options))
+		cookie := sessions.NewCookie(session.Name(), "", session.Options)
+		if session.Options.Secure {
+			cookie.Secure = true
+		}
+		http.SetCookie(w, cookie)
 		return nil
 	}
 
@@ -346,6 +350,10 @@ func (s *ValkeyStore) Save(r *http.Request, w http.ResponseWriter, session *sess
 		return err
 	}
 
-	http.SetCookie(w, sessions.NewCookie(session.Name(), encoded, session.Options))
+	cookie := sessions.NewCookie(session.Name(), encoded, session.Options)
+	if session.Options.Secure {
+		cookie.Secure = true
+	}
+	http.SetCookie(w, cookie)
 	return nil
 }

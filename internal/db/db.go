@@ -38,7 +38,11 @@ func Init(ctx context.Context, databaseURL string, caCert []byte, connectionLimi
 		return nil, fmt.Errorf("unable to parse database DSN: %w", err)
 	}
 
-	config.MaxConns = int32(connectionLimit)
+	maxConns := int32(10)
+	if connectionLimit > 0 && connectionLimit <= 2147483647 {
+		maxConns = int32(connectionLimit)
+	}
+	config.MaxConns = maxConns
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
