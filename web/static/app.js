@@ -423,6 +423,25 @@ function initGlobalInteractivity() {
             });
         });
     });
+    fetchGitHubStars();
+}
+
+async function fetchGitHubStars() {
+    const elMain = document.getElementById('github-stars-count');
+    const elAbout = document.getElementById('github-stars-count-about');
+    if (!elMain && !elAbout) return;
+    try {
+        const res = await fetch('https://api.github.com/repos/0xarchit/contestSync');
+        if (res.ok) {
+            const data = await res.json();
+            if (data && typeof data.stargazers_count === 'number') {
+                if (elMain) elMain.textContent = data.stargazers_count;
+                if (elAbout) elAbout.textContent = data.stargazers_count;
+            }
+        }
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 window.addEventListener('load', () => {
@@ -431,3 +450,9 @@ window.addEventListener('load', () => {
         initGlobalInteractivity();
     }, 100);
 });
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', fetchGitHubStars);
+} else {
+    fetchGitHubStars();
+}
