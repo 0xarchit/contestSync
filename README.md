@@ -9,9 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/0xarchit/contestSync/actions"><img src="https://img.shields.io/github/actions/workflow/status/0xarchit/contestSync/release.yml?style=for-the-badge&logo=github-actions&logoColor=white&color=7ed3a4" alt="Build Status" /></a>
-  <a href="https://github.com/0xarchit/contestSync/releases"><img src="https://img.shields.io/github/v/release/0xarchit/contestSync?style=for-the-badge&color=64dfdf" alt="Latest Release" /></a>
-  <a href="https://github.com/0xarchit/contestSync/blob/main/LICENSE"><img src="https://img.shields.io/github/license/0xarchit/contestSync?style=for-the-badge&color=8a9aa6" alt="License" /></a>
+  <a href="https://github.com/0xarchit/contestSync/releases"><img src="https://img.shields.io/github/v/release/0xarchit/contestSync?style=for-the-badge&logo=github&logoColor=white&labelColor=000000&color=000000" alt="Version" /></a>
+  <a href="https://github.com/0xarchit/contestSync/actions"><img src="https://img.shields.io/github/actions/workflow/status/0xarchit/contestSync/release.yml?style=for-the-badge&logo=githubactions&logoColor=white&labelColor=000000&color=000000" alt="Build Status" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-000000.svg?style=for-the-badge&logo=opensourceinitiative&logoColor=white&labelColor=000000&color=000000" alt="License" /></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.26+-000000.svg?style=for-the-badge&logo=go&logoColor=white&labelColor=000000&color=000000" alt="Go" /></a>
 </p>
 
 ---
