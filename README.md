@@ -1,14 +1,40 @@
-# ContestSync
+<p align="center">
+  <img src="assets/contestSync.webp" alt="ContestSync Logo" width="240" style="border-radius: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.4);" />
+</p>
 
-> **Sync contests to your calendar, beautifully and securely.**
+<h1 align="center">ContestSync</h1>
 
-ContestSync is a robust, high-performance web application and background worker system designed to automatically synchronize competitive programming contests from major platforms directly to Google Calendar. It supports LeetCode, Codeforces, CodeChef, AtCoder, HackerRank, GeeksforGeeks, and Naukri Code360.
+<p align="center">
+  <strong>Enterprise-Grade SaaS & Open-Source Synchronization Engine for Competitive Programming Calendars.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/0xarchit/contestSync/actions"><img src="https://img.shields.io/github/actions/workflow/status/0xarchit/contestSync/release.yml?style=for-the-badge&logo=github-actions&logoColor=white&color=7ed3a4" alt="Build Status" /></a>
+  <a href="https://github.com/0xarchit/contestSync/releases"><img src="https://img.shields.io/github/v/release/0xarchit/contestSync?style=for-the-badge&color=64dfdf" alt="Latest Release" /></a>
+  <a href="https://github.com/0xarchit/contestSync/blob/main/LICENSE"><img src="https://img.shields.io/github/license/0xarchit/contestSync?style=for-the-badge&color=8a9aa6" alt="License" /></a>
+</p>
 
 ---
 
-## High-Level System Architecture
+ContestSync is a robust, high-performance web platform and background worker ecosystem designed to automatically synchronize competitive programming contests from major platforms directly to Google Calendar. By integrating advanced caching, distributed queues, secure cryptography, and low-latency asset rendering, ContestSync provides developers and competitive programmers worldwide with a flawless, automated scheduling interface.
 
-The following diagram illustrates the upgraded high-level system architecture of ContestSync, demonstrating the separation of concerns between the API Web Server, the Background Worker, and the shared database, caching, locking, and queueing tiers.
+## Supported Platforms
+
+* **LeetCode** (GraphQL Fetcher)
+* **Codeforces** (Active Contest API Filter)
+* **CodeChef** (REST API Fetcher)
+* **AtCoder** (HTML Scraper)
+* **HackerRank** (REST API Fetcher)
+* **GeeksforGeeks** (REST API Parser)
+* **Naukri Code360** (Active Event API)
+
+---
+
+## Architecture Highlights
+
+ContestSync utilizes a decoupled, resilient architecture dividing responsibilities between the Web Client, the API Web Server, a Standalone Background Worker, PostgreSQL, Valkey, and Apache Kafka.
+
+### High-Level System Design
 
 ```mermaid
 graph TD
@@ -69,71 +95,56 @@ graph TD
 
 ---
 
-## Component-Specific Architectures
+## Core SaaS & Open-Source Capabilities
 
-### 1. API Web Server (`cmd/server`)
-The API Server handles frontend client requests, user authentication, profile settings, manual synchronization triggers, and administrative overrides.
-* **Routing**: Built using the Go Chi Router.
-* **Middleware Pipeline**:
-  1. **Request ID Injection**: Generates a unique UUIDv4 for tracing requests.
-  2. **Security Headers**: Injecting Content-Security-Policy (CSP), HSTS, X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, and Permissions-Policy.
-  3. **Rate Limiting**: Distributed rate-limiting backed by Valkey, falling back automatically to a thread-safe local LRU cache (10,000 capacity) to prevent memory exhaustion.
-  4. **Request Logging & Recovery**: Captures request metadata and recovers from panic scenarios.
-  5. **Authentication Verification**: Ensures session presence for protected resources.
-  6. **CSRF Validation**: Double-submit token check using token matches stored securely in the user's session values (preventing token size mismatch panics).
-* **State Management**: Uses Gorilla Sessions, dynamically backing session stores with Valkey (using JSON decoders with numbers to avoid type conversion bugs) or cookie stores.
+### 1. In-Memory Static Asset Compiler & Minifier
+* **Zero Disk Overhead**: Static assets (HTML, CSS, JS) are read, parsed, and compiled into memory exactly once at server boot.
+* **On-the-Fly Minification**: Strips comments, collapses whitespaces, and removes excessive formatting programmatically to optimize payload sizes without local npm compilation chains.
+* **Aggressive Revalidation Caching**: Assets are served with deterministic SHA256 ETags and maximum lifetime cache directives (`Cache-Control: public, max-age=31536000, must-revalidate`), assuring lightning-fast load times.
 
-### 2. Standalone Background Worker (`cmd/worker`)
-The Background Worker consumes tasks published to the queue (Kafka/In-Memory) to offload heavy operations from the web server.
-* **Task Processing**: Executes contest extractions and user calendar synchronizations concurrently.
-* **Backpressure Control**: Restricts concurrency using channel semaphores (bounded to 10 concurrent user syncs and 3 platform extractions).
-* **Worker Health Check**: Runs a minimal HTTP server exposing `GET /health` returning status JSON for orchestration/health checks.
+### 2. Distributed Valkey Cache-Aside & Coherence Tier
+* **High-Speed Cache-Aside**: Fetches active platforms and user preferences directly from Valkey, reducing PostgreSQL read pressure.
+* **O(1) Cold Starts**: Merges multiple platform cache misses into a single batched database query using array matching.
+* **Instant Invalidation**: Scrapers and preference changes immediately purge invalid caches (`cache:contests:<platform>` and `cache:user:<userID>`), keeping backend states perfectly coherent.
 
-### 3. Queue System (`internal/queue`)
-ContestSync uses a dual-mode message broker abstraction.
-* **Kafka Mode**: Uses `segmentio/kafka-go` with SASL/TLS. Features configurable partition counts via environment settings.
-* **In-Memory Mode**: If no Kafka host is configured, the queue automatically falls back to in-memory channels (`extractionCh` and `syncCh`) with background consumer goroutines.
-* **Task Types**:
-  - `ExtractionTask`: Contains the target platform string to fetch new contests.
-  - `SyncTask`: Contains the target user ID to synchronize calendar events.
+### 3. Queue-Driven Concurrency & Backpressure control
+* **Dual-Mode Queue Broker**: Supports a distributed Apache Kafka cluster for horizontal scalability, or dynamically falls back to optimized, thread-safe in-memory channels when no Kafka host is configured.
+* **Semaphore-Gated Concurrency**: Restricts active goroutines (max 10 concurrent user syncs and 3 platform extractions) to prevent memory spikes and API rate limit locks.
 
-### 4. Cache & Distributed Locking (`Valkey`)
-Valkey serves as the central hub for distributed states.
-* **Concurrency Locking**: Acquires keyspace locks (`lock:sync:userID` with 5-minute TTL) via `SetNX` during user synchronization tasks to prevent race conditions and duplicate Google Calendar events.
-* **Session Storage**: Holds user session JSON records.
-* **Limiter State**: Tracks rate-limiting IP hits.
+### 4. Zero-Trust Security Gating
+* **At-Rest AES-256-GCM Encryption**: Encrypts and decrypts Google Calendar OAuth2 Refresh Tokens securely using standard cryptographic keys.
+* **Cookie-less Session-Bound CSRF validation**: State-modifying requests verify CSRF signatures embedded strictly inside secure session keys, eliminating double-submit cookie exposure.
+* **Session Regeneration**: Session IDs are fully cleared and rotated upon successful login callbacks to safeguard users against session fixation exploits.
+* **Payload Gating**: Request bodies are capped at 1MB and admin authentication headers are bounded to 256 bytes to prevent buffer and memory exhaustion attempts.
 
-### 5. Automated Scheduler (`internal/scheduler`)
-The Scheduler manages cron tasks via `robfig/cron/v3` inside the server context:
-* **`@daily` Platform Extraction**: Queues extraction tasks for all platforms.
-* **`@daily` User Synchronization**: Queues sync tasks for all users.
-* **`@daily` Database Pruning**: Deletes contests older than 30 days (cascading to delete synced events).
-* **`@every 15m` OAuth State Cleanup**: Clears expired transient OAuth states older than 10 minutes.
-
-### 6. Scrapers & Extractors (`internal/extractor`)
-Each platform has a dedicated fetcher mapping to a shared `Contest` struct:
-* **LeetCode**: GraphQL queries sent to `leetcode.com/graphql`.
-* **Codeforces**: API fetches from `codeforces.com/api/contest.list` filtering pre-contests.
-* **CodeChef**: JSON API parsing of future contests.
-* **AtCoder**: HTML table parser extraction.
-* **HackerRank**: HTTP request API integration.
-* **GeeksforGeeks**: REST API content parsing.
-* **Naukri Code360**: JSON API fetches using `event_start_time` mapping for start times and durations.
-
-### 7. Calendar Synchronization Engine (`internal/sync`)
-Performs the actual calendar writing operations:
-* **Distributed Lock Check**: Rejects concurrent requests if a Valkey or `sync.Map` lock is already active for the user.
-* **Token Decryption**: Decrypts the Google OAuth refresh token using AES-256-GCM.
-* **Calendar Resolution**: Detects if the user selected a dedicated calendar. Creates a separate "ContestSync" calendar if required, otherwise defaults to the primary calendar.
-* **Google API Level Idempotency**: Generates a deterministic base32hex(md5(userID + "_" + contestID)) string as the Google Calendar Event ID.
-* **Exponential Backoff**: Retries calendar event inserts up to 3 times (500ms, 1000ms delay) on transient errors.
-* **Conflict Reconciliation**: Catches `409 Conflict` duplicate responses and reconciles them into the database `synced_events` mapping.
+### 5. Deterministic Idempotency & Conflict Resolution
+* **Deterministic Event IDs**: Hashes the combination of user credentials and contest metadata into a base32hex string passed directly to the Google Calendar API as the event's unique identifier.
+* **409 Conflict Reconciliation**: Catches and processes duplicate calendar sync triggers gracefully, maintaining sync integrity without duplicate event pollution.
 
 ---
 
-## Core System Flows
+## Deep-Dive Component Architecture
 
-### 1. User Authentication & Registration Sequence
+### 1. API Web Server (`cmd/server`)
+* **Routing**: Driven by Go Chi Router with structured log tracing.
+* **State Management**: Uses Gorilla Sessions, dynamically choosing Valkey or fallback Cookie Stores.
+* **Rate Limiting**: Distributed IP rate-limiting powered by Valkey with a dynamic retry interval header. Auto-falls back to a thread-safe local LRU cache (10,000 size capacity) on redis connection interruptions.
+
+### 2. Background Worker (`cmd/worker`)
+* **Task Consumers**: Consumes and processes background workloads.
+* **Health Probes**: Runs a dedicated micro-server providing a `/health` endpoint for Kubernetes/orchestration validation.
+
+### 3. Automated Cron Scheduler (`internal/scheduler`)
+* **Extractions**: Daily trigger to fetch contest lists.
+* **Syncs**: Daily trigger to update all active user calendars.
+* **Data Pruning**: Daily trigger that purges events older than 30 days.
+* **OAuth Cleans**: Ticker running every 15 minutes to purge stale transient states.
+
+---
+
+## System Flowcharts
+
+### 1. Authentication Lifecycle
 
 ```mermaid
 sequenceDiagram
@@ -164,7 +175,7 @@ sequenceDiagram
     Browser->>User: Show Preferences Dashboard
 ```
 
-### 2. Contest Synchronization Sequence
+### 2. Background Synchronization
 
 ```mermaid
 sequenceDiagram
@@ -212,128 +223,23 @@ sequenceDiagram
     end
 ```
 
-### 3. Contest Extraction Sequence
+---
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Scheduler as Scheduler (Cron)
-    participant Queue as Queue (Kafka / In-Memory)
-    participant Worker
-    participant Platform as Contest Platform API/Web
-    participant DB as PostgreSQL
+## Stack Specifications
 
-    Scheduler->>Queue: Publish ExtractionTask (platform)
-    Queue->>Worker: Consume ExtractionTask (platform)
-    Worker->>Platform: Fetch API or Scrape HTML
-    Platform-->>Worker: Contest list
-    loop For each extracted contest
-        Worker->>DB: Batch INSERT/UPDATE contests (ON CONFLICT update details)
-    end
-```
-
-### 4. General System Flowchart
-
-```mermaid
-flowchart TD
-    Start([System Start]) --> InitConfig[Load Config & env]
-    InitConfig --> InitDB[Initialize pgx Connection Pool]
-    InitConfig --> InitValkey{VALKEY_URI configured?}
-    
-    InitValkey -->|Yes| ConnectValkey[Connect to Valkey & Init ValkeySessionStore]
-    InitValkey -->|No| ConnectCookie[Initialize CookieStore]
-    
-    ConnectValkey --> InitQueue
-    ConnectCookie --> InitQueue
-    
-    InitQueue{KAFKA_HOST configured?}
-    InitQueue -->|Yes| ConnectKafka[Initialize Kafka Writer & topics]
-    InitQueue -->|No| ConnectInMem[Initialize In-Memory Channels]
-    
-    ConnectKafka --> StartApp
-    ConnectInMem --> StartApp
-
-    subgraph Server Runtime
-        StartApp --> StartHTTP[Start HTTP Server on PORT]
-        StartApp --> StartSched[Start Cron Scheduler]
-        StartApp --> ConsumeLocal[Start Queue Consumers]
-    end
-
-    subgraph Cron Jobs
-        StartSched -->|Daily| CronExtract[RunExtraction: Queue platform tasks]
-        StartSched -->|Daily| CronSync[SyncAllUsers: Queue user sync tasks]
-        StartSched -->|Daily| CronPrune[PruneOldData: Delete contests > 30 days old]
-        StartSched -->|Every 15m| CronOAuth[CleanupOAuthStates: Prune states > 10m old]
-    end
-
-    subgraph Task Processing
-        ConsumeLocal -->|Consume Extraction Task| FetchPlat[Fetch contests from platform]
-        FetchPlat --> DBBatch[Batch Insert/Update contests in PostgreSQL]
-        
-        ConsumeLocal -->|Consume Sync Task| CheckLock{Valkey/sync.Map Lock active?}
-        CheckLock -->|Yes| LockActive[Log warning & abort task]
-        CheckLock -->|No| AcquireLock[Acquire user sync lock & set status = syncing]
-        
-        AcquireLock --> DecryptToken[Decrypt Google Refresh Token via AES-256-GCM]
-        DecryptToken --> CalResolution{use_dedicated enabled?}
-        
-        CalResolution -->|Yes| CheckDed[Check/Create Dedicated ContestSync Calendar]
-        CalResolution -->|No| UsePrimary[Use primary Calendar]
-        
-        CheckDed --> QueryContests[Query future contests matching user's platforms]
-        UsePrimary --> QueryContests
-        
-        QueryContests --> LoopContests{For each unsynced contest}
-        LoopContests -->|Next| DetID[Compute MD5 + Base32 deterministic Event ID]
-        DetID --> InsertCal{Insert Event to Calendar API}
-        
-        InsertCal -->|Success| SaveSync[Insert record into synced_events]
-        InsertCal -->|409 Conflict| SaveSyncConflict[Insert record into synced_events ON CONFLICT DO NOTHING]
-        InsertCal -->|Transient Failure| RetryInsert{Retry < 3 times with backoff?}
-        
-        RetryInsert -->|Yes| InsertCal
-        RetryInsert -->|No| LogErr[Log failure and continue]
-        
-        SaveSync --> LoopContests
-        SaveSyncConflict --> LoopContests
-        LogErr --> LoopContests
-        
-        LoopContests -->|Done| SetSuccessStatus[Set user status = success, update last_sync_at]
-        SetSuccessStatus --> ReleaseLock[Release lock & end task]
-    end
-```
+* **Frontend**: Responsive CSS, Vanilla JS, GSAP Animations, Lenis Smooth Scroll.
+* **Backend Core**: Golang (1.26+), Chi Router, pgx/v5 Pool, Gorilla Sessions, robfig/cron/v3.
+* **Distributed Engine**: Valkey, Apache Kafka (segmentio/kafka-go).
+* **Storage**: PostgreSQL.
+* **Integrations**: Google Calendar API v3.
 
 ---
 
-## Security Framework
+## Configuration & Getting Started
 
-ContestSync enforces a stringent, zero-trust security architecture:
-1. **At-Rest Token Encryption**: Credentials and Google Calendar OAuth2 Refresh Tokens are encrypted in the PostgreSQL database using AES-256-GCM with a dedicated 32-byte encryption key.
-2. **Session Hijacking Defenses**: Session identifiers are generated securely using high-entropy random keys. Session IDs are fully regenerated (`session.ID = ""`) upon successful login callbacks to eliminate session fixation vulnerabilities.
-3. **Session-Bound CSRF Token validation**: Action-modifying requests (`POST /preferences`, `POST /sync`, `DELETE /account`) require custom `X-CSRF-Token` headers verified directly against session variables, preventing cross-site scripting vulnerabilities.
-4. **Denial of Service (DoS) Hardening**:
-   - Headers: Admin authentication headers are restricted to a maximum length of 256 bytes.
-   - Payloads: Incoming JSON request bodies are restricted to a maximum size of 1MB via `http.MaxBytesReader`.
-5. **Rate Limiting Protection**: Distributed IP rate-limiting prevents credential stuffing and endpoint abuse.
-6. **Graceful Termination**: Handles OS interrupts and termination signals (SIGINT, SIGTERM), completing ongoing sync jobs and cleaning up connections.
+### 1. Environment Configurations
 
----
-
-## Tech Stack & Dependencies
-
-* **Frontend UI**: HTML5, Vanilla JavaScript, CSS variables, Lenis Smooth Scroll, GSAP & ScrollTrigger.
-* **Backend Runtime**: Golang (Go 1.26+), Chi Router, pgx/v5 PostgreSQL pool, Go-Redis/v9 Valkey client, robfig/cron, gorilla/sessions.
-* **Broker & Queue**: Apache Kafka (segmentio/kafka-go) or Local Go Channels.
-* **Persistence**: PostgreSQL, Valkey.
-* **External APIs**: Google Calendar API v3.
-
----
-
-## Getting Started
-
-### 1. Environment Setup
-
-Configure a `.env` file in the project root:
+Define these environment settings in a `.env` file at the root:
 
 ```env
 POSTGRES_DB=postgres://user:pass@host:port/db?sslmode=require
@@ -342,7 +248,6 @@ GOOGLE_CLIENT_ID=your_id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your_secret
 GOOGLE_REDIRECT_URL=http://localhost:8080/auth/google/callback
 SESSION_SECRET=your_32_byte_hex_secret
-CSRF_SECRET=your_32_byte_hex_secret
 ENCRYPTION_KEY=your_32_byte_hex_secret
 PORT=8080
 ENV=development
@@ -354,34 +259,32 @@ KAFKA_PARTITIONS=4
 VALKEY_URI=rediss://default:password@host:port
 ```
 
-### 2. Compilation and Running
+### 2. Execution and Compilation
 
-#### Native Go Compilation
-
-To compile and launch the server service locally:
+#### Compile and Start API Server Locally
 
 ```powershell
 $env:CGO_ENABLED=0; $env:GOOS="windows"; $env:GOARCH="amd64"; $env:GOAMD64="v3"; go build -tags "netgo osusergo" -trimpath -buildvcs=false -ldflags="-s -w -extldflags -static" -o server.exe ./cmd/server/main.go 2>&1
 ./server.exe
 ```
 
-To compile and run the worker service locally:
+#### Compile and Start Background Worker Locally
 
 ```powershell
 $env:CGO_ENABLED=0; $env:GOOS="windows"; $env:GOARCH="amd64"; $env:GOAMD64="v3"; go build -tags "netgo osusergo" -trimpath -buildvcs=false -ldflags="-s -w -extldflags -static" -o worker.exe ./cmd/worker/main.go 2>&1
 ./worker.exe
 ```
 
-#### Docker Containerization
+#### Multi-Service Containerized Deployment
 
-To build the two separate Docker images manually:
+To compile images manually:
 
 ```powershell
 docker build -f Dockerfile.server -t contestsync-server .
 docker build -f Dockerfile.worker -t contestsync-worker .
 ```
 
-To build and launch both services concurrently using Docker Compose:
+To deploy the entire environment via Docker Compose:
 
 ```powershell
 docker compose up --build
