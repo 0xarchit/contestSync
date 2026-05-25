@@ -1,67 +1,210 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terms of Service — ContestSync</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Terms of Service - ContestSync</title>
+    <link rel="icon" type="image/webp" href="icon.webp" />
+    <meta
+      name="description"
+      content="Review the ContestSync Terms of Service and user policies to understand standard platform use, security, and automated calendar updates."
+    />
+    <meta
+      name="keywords"
+      content="terms of service, user policy, contestsync conditions, calendar auto sync rules"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
     <script src="https://unpkg.com/lenis@1.1.14/dist/lenis.min.js"></script>
     <script src="app.js" defer></script>
-</head>
-<body>
+  </head>
+  <body>
     <div class="noise-overlay"></div>
 
     <header class="header">
-        <div class="container" style="display:flex; justify-content:space-between; align-items:center;">
-            <div class="logo"><a href="index.html" style="text-decoration:none;">ContestSync</a></div>
-            <a href="index.html" class="btn btn-ghost" style="padding:0.5rem 1rem; border:1px solid var(--bg-border); border-radius:6px;">Back Home</a>
+      <div
+        class="container"
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        "
+      >
+        <div class="logo">
+          <a href="index.html"
+            ><img src="icon.webp" alt="ContestSync Logo" /><span
+              >ContestSync</span
+            ></a
+          >
         </div>
+        <a
+          href="index.html"
+          class="btn btn-ghost"
+          style="
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--bg-border);
+            border-radius: 6px;
+          "
+          >Back Home</a
+        >
+      </div>
     </header>
 
-    <main style="padding-top: 8rem; min-height: calc(100vh - 12rem);">
-        <section class="terms-section" style="padding-block: 2rem;">
-            <div class="container" style="max-width: 800px;">
-                <div class="badge" style="border-color: var(--accent-gold); color: var(--accent-gold);">Legal</div>
-                <h1 style="font-size: var(--t-h2); margin-bottom: 2rem;">Terms of Service</h1>
-                
-                <div class="terms-content" style="display:flex; flex-direction:column; gap:2rem; line-height:1.8; color:var(--text-secondary); font-size:var(--t-body);">
-                    <p>By connecting your Google account to ContestSync, you agree to these Terms of Service.</p>
+    <main style="padding-top: 8rem; min-height: calc(100vh - 12rem)">
+      <section class="terms-section" style="padding-block: 2rem">
+        <div class="container" style="max-width: 800px">
+          <div
+            class="badge"
+            style="border-color: var(--accent-gold); color: var(--accent-gold)"
+          >
+            Legal
+          </div>
+          <h1 style="font-size: var(--t-h2); margin-bottom: 2rem">
+            Terms of Service
+          </h1>
 
-                    <h2 style="font-size: var(--t-h3); color: var(--text-primary); margin-top: 1rem; font-family:'Syne',sans-serif; font-weight:800;">1. Description of Service</h2>
-                    <p>ContestSync is a free service that connects to your Google Calendar to automatically synchronize programming contest schedules from supported platforms.</p>
+          <div
+            class="terms-content"
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 2rem;
+              line-height: 1.8;
+              color: var(--text-secondary);
+              font-size: var(--t-body);
+            "
+          >
+            <p>
+              By connecting your Google account to ContestSync, you agree to
+              these Terms of Service.
+            </p>
 
-                    <h2 style="font-size: var(--t-h3); color: var(--text-primary); margin-top: 1rem; font-family:'Syne',sans-serif; font-weight:800;">2. User Conduct & License</h2>
-                    <p>You grant ContestSync the permission to read and write events to your calendar in accordance with your platform selection. We do not use this access for any purpose other than synchronizing contest details.</p>
+            <h2
+              style="
+                font-size: var(--t-h3);
+                color: var(--text-primary);
+                margin-top: 1rem;
+                font-family: &quot;Syne&quot;, sans-serif;
+                font-weight: 800;
+              "
+            >
+              1. Description of Service
+            </h2>
+            <p>
+              ContestSync is a free service that connects to your Google
+              Calendar to automatically synchronize programming contest
+              schedules from supported platforms.
+            </p>
 
-                    <h2 style="font-size: var(--t-h3); color: var(--text-primary); margin-top: 1rem; font-family:'Syne',sans-serif; font-weight:800;">3. Account Deletion & Purging</h2>
-                    <p>You can terminate your relationship with ContestSync at any time. Clicking the "Delete Account" button in your preferences dashboard will immediately:</p>
-                    <ul style="padding-left: 1.5rem; display:flex; flex-direction:column; gap:0.5rem;">
-                        <li>Revoke your Google OAuth permissions.</li>
-                        <li>Delete your preferences and tokens from our database.</li>
-                        <li>Remove all events created by ContestSync from your calendar.</li>
-                    </ul>
+            <h2
+              style="
+                font-size: var(--t-h3);
+                color: var(--text-primary);
+                margin-top: 1rem;
+                font-family: &quot;Syne&quot;, sans-serif;
+                font-weight: 800;
+              "
+            >
+              2. User Conduct & License
+            </h2>
+            <p>
+              You grant ContestSync the permission to read and write events to
+              your calendar in accordance with your platform selection. We do
+              not use this access for any purpose other than synchronizing
+              contest details.
+            </p>
 
-                    <h2 style="font-size: var(--t-h3); color: var(--text-primary); margin-top: 1rem; font-family:'Syne',sans-serif; font-weight:800;">4. Disclaimers & Limitation of Liability</h2>
-                    <p>ContestSync is provided "as is". While we aim for 100% accuracy, we are not responsible for missing contests, incorrect timezone calculations, or scheduling conflicts. Verify important contest timings independently.</p>
-                </div>
-            </div>
-        </section>
+            <h2
+              style="
+                font-size: var(--t-h3);
+                color: var(--text-primary);
+                margin-top: 1rem;
+                font-family: &quot;Syne&quot;, sans-serif;
+                font-weight: 800;
+              "
+            >
+              3. Account Deletion & Purging
+            </h2>
+            <p>
+              You can terminate your relationship with ContestSync at any time.
+              Clicking the "Delete Account" button in your preferences dashboard
+              will immediately:
+            </p>
+            <ul
+              style="
+                padding-left: 1.5rem;
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+              "
+            >
+              <li>Revoke your Google OAuth permissions.</li>
+              <li>Delete your preferences and tokens from our database.</li>
+              <li>
+                Remove all events created by ContestSync from your calendar.
+              </li>
+            </ul>
+
+            <h2
+              style="
+                font-size: var(--t-h3);
+                color: var(--text-primary);
+                margin-top: 1rem;
+                font-family: &quot;Syne&quot;, sans-serif;
+                font-weight: 800;
+              "
+            >
+              4. Disclaimers & Limitation of Liability
+            </h2>
+            <p>
+              ContestSync is provided "as is". While we aim for 100% accuracy,
+              we are not responsible for missing contests, incorrect timezone
+              calculations, or scheduling conflicts. Verify important contest
+              timings independently.
+            </p>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer class="footer">
-        <div class="container" style="display:flex; flex-direction:column; gap:1rem; align-items:center;">
-            <p>&copy; 2026 ContestSync. Built for winners.</p>
-            <div class="footer-links" style="display:flex; gap:1.5rem; font-size:var(--t-label); color:var(--text-secondary);">
-                <a href="about.html" style="text-decoration:none;">About</a>
-                <a href="privacy.html" style="text-decoration:none;">Privacy Policy</a>
-                <a href="terms.html" style="text-decoration:none; color:var(--text-primary);">Terms of Service</a>
-            </div>
+      <div
+        class="container"
+        style="
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          align-items: center;
+        "
+      >
+        <p>&copy; 2026 ContestSync. Built for winners.</p>
+        <div
+          class="footer-links"
+          style="
+            display: flex;
+            gap: 1.5rem;
+            font-size: var(--t-label);
+            color: var(--text-secondary);
+          "
+        >
+          <a href="about.html" style="text-decoration: none">About</a>
+          <a href="privacy.html" style="text-decoration: none"
+            >Privacy Policy</a
+          >
+          <a
+            href="terms.html"
+            style="text-decoration: none; color: var(--text-primary)"
+            >Terms of Service</a
+          >
         </div>
+      </div>
     </footer>
-</body>
+  </body>
 </html>

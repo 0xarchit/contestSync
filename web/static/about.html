@@ -1,85 +1,326 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>About — ContestSync</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About - ContestSync</title>
+    <link rel="icon" type="image/webp" href="icon.webp" />
+    <meta
+      name="description"
+      content="Learn about our mission, how ContestSync solves calendar synchronization for competitive programming platforms, and our focus on developer privacy."
+    />
+    <meta
+      name="keywords"
+      content="about contestsync, competitive programming, contest calendar, open source calendar sync"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
     <script src="https://unpkg.com/lenis@1.1.14/dist/lenis.min.js"></script>
     <script src="app.js" defer></script>
-</head>
-<body>
+  </head>
+  <body>
     <div class="noise-overlay"></div>
 
     <header class="header">
-        <div class="container" style="display:flex; justify-content:space-between; align-items:center;">
-            <div class="logo"><a href="index.html" style="text-decoration:none;">ContestSync</a></div>
-            <a href="index.html" class="btn btn-ghost" style="padding:0.5rem 1rem; border:1px solid var(--bg-border); border-radius:6px;">Back Home</a>
+      <div
+        class="container"
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        "
+      >
+        <div class="logo">
+          <a href="index.html"
+            ><img src="icon.webp" alt="ContestSync Logo" /><span
+              >ContestSync</span
+            ></a
+          >
         </div>
+        <a
+          href="index.html"
+          class="btn btn-ghost"
+          style="
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--bg-border);
+            border-radius: 6px;
+          "
+          >Back Home</a
+        >
+      </div>
     </header>
 
-    <main style="padding-top: 8rem; min-height: calc(100vh - 12rem);">
-        <section class="about-section" style="padding-block: 2rem;">
-            <div class="container" style="max-width: 800px;">
-                <div class="badge" style="border-color: var(--accent-primary); color: var(--accent-primary);">Our Story</div>
-                <h1 style="font-size: var(--t-h2); margin-bottom: 2rem;">Built for the Competitive Mind</h1>
-                
-                <div class="about-content" style="display:flex; flex-direction:column; gap:2rem; line-height:1.8; color:var(--text-secondary); font-size:var(--t-body);">
-                    <p>ContestSync was born out of frustration. As active competitive programmers, we spent too much time manually entering contest schedules from LeetCode, Codeforces, and AtCoder into our personal calendars, or worse, converting timezone offsets in our heads only to miss the contest entirely.</p>
-                    
-                    <p>We wanted a single, unified, automated system that puts upcoming contests exactly where they belong: right on your schedule, synced automatically, and adjusted to your local timezone.</p>
+    <main style="padding-top: 8rem; min-height: calc(100vh - 12rem)">
+      <section class="about-section" style="padding-block: 2rem">
+        <div class="container" style="max-width: 800px">
+          <div
+            class="badge"
+            style="
+              border-color: var(--accent-primary);
+              color: var(--accent-primary);
+            "
+          >
+            Our Story
+          </div>
+          <h1 style="font-size: var(--t-h2); margin-bottom: 2rem">
+            Built for the Competitive Mind
+          </h1>
 
-                    <h2 style="font-size: var(--t-h3); color: var(--text-primary); margin-top: 1rem; font-family:'Syne',sans-serif; font-weight:800;">Simplicity & Privacy First</h2>
-                    
-                    <p>We believe tools should serve you, not track you. ContestSync operates on a serverless-style pipeline that pulls official schedules, converts them to your timezone, and pushes them directly to your calendar. Your data remains isolated, secure, and encrypted at all times.</p>
+          <div
+            class="about-content"
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 2rem;
+              line-height: 1.8;
+              color: var(--text-secondary);
+              font-size: var(--t-body);
+            "
+          >
+            <p>
+              ContestSync was born out of frustration. As active competitive
+              programmers, we spent too much time manually entering contest
+              schedules from LeetCode, Codeforces, and AtCoder into our personal
+              calendars, or worse, converting timezone offsets in our heads only
+              to miss the contest entirely.
+            </p>
 
-                    <p>We respect your ownership of your data. If you ever decide to stop using ContestSync, you can permanently delete your account with a single click from your preferences panel. Doing so immediately revokes Google OAuth permissions, deletes your database preferences, and completely purges all synced events from your calendar.</p>
+            <p>
+              We wanted a single, unified, automated system that puts upcoming
+              contests exactly where they belong: right on your schedule, synced
+              automatically, and adjusted to your local timezone.
+            </p>
 
-                    <div class="opensource-card" style="margin-top: 2rem; padding: 2.5rem; background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(100, 223, 223, 0.03) 100%); border: 1px solid var(--bg-border); border-radius: 16px; display:flex; flex-direction:column; gap:1.25rem; position:relative; overflow:hidden; transition: all 0.4s ease; box-shadow: 0 10px 30px rgba(0,0,0,0.25);">
-                        <div style="position:absolute; top:0; right:0; width:120px; height:120px; background:radial-gradient(circle, rgba(100,223,223,0.06) 0%, transparent 70%); pointer-events:none;"></div>
-                        <div style="display:flex; align-items:center; gap:0.75rem;">
-                            <div style="background: rgba(126,211,164,0.1); padding: 0.5rem; border-radius: 8px; color: var(--accent-primary);">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-                                </svg>
-                            </div>
-                            <h3 style="font-size: 1.25rem; color: var(--text-primary); font-family:'Syne',sans-serif; font-weight:800; margin:0;">100% Free & Open Source</h3>
-                        </div>
-                        <p style="margin:0; color: var(--text-secondary); line-height: 1.7; font-size: 0.95rem;">
-                            ContestSync is built with transparency and privacy in mind. Our entire codebase is open source and hosted on GitHub. If this tool helped you save time or stay on top of your game, please consider starring the repository to support our work and help others discover us!
-                        </p>
-                        <div style="display:flex; align-items:center; gap:1rem; margin-top: 0.5rem; flex-wrap: wrap;">
-                            <a href="https://github.com/0xarchit/contestSync" target="_blank" rel="noopener noreferrer" class="github-star-btn hover-glow-btn" style="display:inline-flex; align-items:center; gap:0.5rem; background:rgba(100,223,223,0.08); border:1px solid var(--accent-cyan); color:var(--text-primary); padding:0.6rem 1.2rem; border-radius:6px; text-decoration:none; font-weight:600; font-size:0.85rem; transition:all 0.3s ease; box-shadow:0 0 15px rgba(100,223,223,0.05); cursor:pointer;">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                                </svg>
-                                <span>Star on GitHub</span>
-                                <span class="github-stars-count" id="github-stars-count-about" style="background:var(--bg-border); color:var(--accent-cyan); padding:0.1rem 0.4rem; border-radius:4px; font-size:0.75rem; font-weight:800; border:1px solid rgba(100,223,223,0.2);">--</span>
-                                <svg class="star-icon-yellow" width="14" height="14" viewBox="0 0 24 24" fill="var(--accent-gold)">
-                                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                                </svg>
-                            </a>
-                        </div>
-                    </div>
+            <h2
+              style="
+                font-size: var(--t-h3);
+                color: var(--text-primary);
+                margin-top: 1rem;
+                font-family: &quot;Syne&quot;, sans-serif;
+                font-weight: 800;
+              "
+            >
+              Simplicity & Privacy First
+            </h2>
+
+            <p>
+              We believe tools should serve you, not track you. ContestSync
+              operates on a serverless-style pipeline that pulls official
+              schedules, converts them to your timezone, and pushes them
+              directly to your calendar. Your data remains isolated, secure, and
+              encrypted at all times.
+            </p>
+
+            <p>
+              We respect your ownership of your data. If you ever decide to stop
+              using ContestSync, you can permanently delete your account with a
+              single click from your preferences panel. Doing so immediately
+              revokes Google OAuth permissions, deletes your database
+              preferences, and completely purges all synced events from your
+              calendar.
+            </p>
+
+            <div
+              class="opensource-card"
+              style="
+                margin-top: 2rem;
+                padding: 2.5rem;
+                background: linear-gradient(
+                  135deg,
+                  var(--bg-surface) 0%,
+                  rgba(100, 223, 223, 0.03) 100%
+                );
+                border: 1px solid var(--bg-border);
+                border-radius: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 1.25rem;
+                position: relative;
+                overflow: hidden;
+                transition: all 0.4s ease;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+              "
+            >
+              <div
+                style="
+                  position: absolute;
+                  top: 0;
+                  right: 0;
+                  width: 120px;
+                  height: 120px;
+                  background: radial-gradient(
+                    circle,
+                    rgba(100, 223, 223, 0.06) 0%,
+                    transparent 70%
+                  );
+                  pointer-events: none;
+                "
+              ></div>
+              <div style="display: flex; align-items: center; gap: 0.75rem">
+                <div
+                  style="
+                    background: rgba(126, 211, 164, 0.1);
+                    padding: 0.5rem;
+                    border-radius: 8px;
+                    color: var(--accent-primary);
+                  "
+                >
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path
+                      d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"
+                    ></path>
+                  </svg>
                 </div>
+                <h3
+                  style="
+                    font-size: 1.25rem;
+                    color: var(--text-primary);
+                    font-family: &quot;Syne&quot;, sans-serif;
+                    font-weight: 800;
+                    margin: 0;
+                  "
+                >
+                  100% Free & Open Source
+                </h3>
+              </div>
+              <p
+                style="
+                  margin: 0;
+                  color: var(--text-secondary);
+                  line-height: 1.7;
+                  font-size: 0.95rem;
+                "
+              >
+                ContestSync is built with transparency and privacy in mind. Our
+                entire codebase is open source and hosted on GitHub. If this
+                tool helped you save time or stay on top of your game, please
+                consider starring the repository to support our work and help
+                others discover us!
+              </p>
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 1rem;
+                  margin-top: 0.5rem;
+                  flex-wrap: wrap;
+                "
+              >
+                <a
+                  href="https://github.com/0xarchit/contestSync"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="github-star-btn hover-glow-btn"
+                  style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    background: rgba(100, 223, 223, 0.08);
+                    border: 1px solid var(--accent-cyan);
+                    color: var(--text-primary);
+                    padding: 0.6rem 1.2rem;
+                    border-radius: 6px;
+                    text-decoration: none;
+                    font-weight: 600;
+                    font-size: 0.85rem;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 0 15px rgba(100, 223, 223, 0.05);
+                    cursor: pointer;
+                  "
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+                    />
+                  </svg>
+                  <span>Star on GitHub</span>
+                  <span
+                    class="github-stars-count"
+                    id="github-stars-count-about"
+                    style="
+                      background: var(--bg-border);
+                      color: var(--accent-cyan);
+                      padding: 0.1rem 0.4rem;
+                      border-radius: 4px;
+                      font-size: 0.75rem;
+                      font-weight: 800;
+                      border: 1px solid rgba(100, 223, 223, 0.2);
+                    "
+                    >--</span
+                  >
+                  <svg
+                    class="star-icon-yellow"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="var(--accent-gold)"
+                  >
+                    <polygon
+                      points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+                    />
+                  </svg>
+                </a>
+              </div>
             </div>
-        </section>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer class="footer">
-        <div class="container" style="display:flex; flex-direction:column; gap:1rem; align-items:center;">
-            <p>&copy; 2026 ContestSync. Built for winners.</p>
-            <div class="footer-links" style="display:flex; gap:1.5rem; font-size:var(--t-label); color:var(--text-secondary);">
-                <a href="about.html" style="text-decoration:none; color:var(--text-primary);">About</a>
-                <a href="privacy.html" style="text-decoration:none;">Privacy Policy</a>
-                <a href="terms.html" style="text-decoration:none;">Terms of Service</a>
-            </div>
+      <div
+        class="container"
+        style="
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          align-items: center;
+        "
+      >
+        <p>&copy; 2026 ContestSync. Built for winners.</p>
+        <div
+          class="footer-links"
+          style="
+            display: flex;
+            gap: 1.5rem;
+            font-size: var(--t-label);
+            color: var(--text-secondary);
+          "
+        >
+          <a
+            href="about.html"
+            style="text-decoration: none; color: var(--text-primary)"
+            >About</a
+          >
+          <a href="privacy.html" style="text-decoration: none"
+            >Privacy Policy</a
+          >
+          <a href="terms.html" style="text-decoration: none"
+            >Terms of Service</a
+          >
         </div>
+      </div>
     </footer>
-</body>
+  </body>
 </html>

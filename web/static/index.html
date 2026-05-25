@@ -1,286 +1,564 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ContestSync — Never miss a coding contest again.</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/webp" href="icon.webp" />
+    <meta
+      name="description"
+      content="Automate competitive programming schedules by syncing AtCoder, Codeforces, CodeChef, and LeetCode contests directly to your Google Calendar in your local timezone."
+    />
+    <meta
+      name="keywords"
+      content="competitive programming, contest sync, calendar sync, leetcode, codeforces, codechef, atcoder, hackerrank, gfg, google calendar"
+    />
+    <meta
+      property="og:title"
+      content="ContestSync - Automated Competitive Programming Calendar Sync"
+    />
+    <meta
+      property="og:description"
+      content="Pick your platforms. Sync coding contests automatically to your calendar in your local timezone. Free, open source, and privacy first."
+    />
+    <meta property="og:image" content="icon.webp" />
+    <meta property="og:url" content="https://github.com/0xarchit/contestSync" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
     <script src="https://unpkg.com/lenis@1.1.14/dist/lenis.min.js"></script>
     <script src="app.js" defer></script>
-</head>
-<body>
+  </head>
+  <body>
     <div class="noise-overlay"></div>
 
     <header class="header">
-        <div class="container header-container">
-            <div class="logo">ContestSync</div>
-            <div class="github-star-wrapper">
-                <div class="github-star-text-btn-container">
-                    <span class="star-repo-text">Star repo</span>
-                    <a href="https://github.com/0xarchit/contestSync" target="_blank" rel="noopener noreferrer" class="github-star-btn">
-                        <svg class="github-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                        </svg>
-                        <span class="github-stars-count" id="github-stars-count">--</span>
-                        <svg class="star-icon-yellow" width="14" height="14" viewBox="0 0 24 24" fill="var(--accent-gold)">
-                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                        </svg>
-                    </a>
-                </div>
-                <div class="curvy-arrow-container">
-                    <svg class="curvy-arrow" viewBox="0 0 160 40" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path class="curvy-arrow-bg" d="M 20 12 Q 75 35 125 15" stroke="rgba(126, 211, 164, 0.6)" />
-                        <path class="curvy-arrow-glow" d="M 20 12 Q 75 35 125 15" stroke-dasharray="30 120" stroke-dashoffset="0" />
-                        <path d="M 116 16 L 125 15 L 122 24" />
-                    </svg>
-                </div>
-            </div>
+      <div class="container header-container">
+        <div class="logo">
+          <img src="icon.webp" alt="ContestSync Logo" />
+          <span>ContestSync</span>
         </div>
+        <div class="github-star-wrapper">
+          <div class="github-star-text-btn-container">
+            <span class="star-repo-text">Star repo</span>
+            <a
+              href="https://github.com/0xarchit/contestSync"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="github-star-btn"
+            >
+              <svg
+                class="github-icon"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path
+                  d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"
+                />
+              </svg>
+              <span class="github-stars-count" id="github-stars-count">--</span>
+              <svg
+                class="star-icon-yellow"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="var(--accent-gold)"
+              >
+                <polygon
+                  points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+                />
+              </svg>
+            </a>
+          </div>
+          <div class="curvy-arrow-container">
+            <svg
+              class="curvy-arrow"
+              viewBox="0 0 160 40"
+              fill="none"
+              stroke="var(--accent-cyan)"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                class="curvy-arrow-bg"
+                d="M 20 12 Q 75 35 125 15"
+                stroke="rgba(126, 211, 164, 0.6)"
+              />
+              <path
+                class="curvy-arrow-glow"
+                d="M 20 12 Q 75 35 125 15"
+                stroke-dasharray="30 120"
+                stroke-dashoffset="0"
+              />
+              <path d="M 116 16 L 125 15 L 122 24" />
+            </svg>
+          </div>
+        </div>
+      </div>
     </header>
 
     <main>
-        <section class="hero" id="hero">
-            <div class="hero-bg"></div>
-            <div class="container hero-container">
-                <div class="hero-content">
-                    <p class="hc-prompt">contestsync --status</p>
-                    <div class="badge">Automatic Contest Sync</div>
-                    <h1 class="hero-title">
-                        <span class="line">Never miss a</span>
-                        <span class="line offset">coding contest</span>
-                        <span class="line underlined">again.<span class="hc-cursor"></span></span>
-                    </h1>
-                    <p class="hero-subtext">Connect Google. Pick your platforms. Contests appear in your calendar. That's it.</p>
-                    <div class="hero-actions">
-                        <a href="/auth/google" class="btn btn-primary">Connect With Google <svg class="icon-ext" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>
-                        <a href="#problem" class="btn btn-ghost">See how it works <svg class="icon-ext" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></a>
-                    </div>
-                </div>
-                <div class="hero-visual">
-                    <div class="contest-card card-1">
-                        <div class="dot leetcode"></div>
-                        <div class="card-info">
-                            <span class="platform">LeetCode</span>
-                            <span class="title">Weekly Contest 400</span>
-                            <span class="time">in 2 days</span>
-                        </div>
-                    </div>
-                    <div class="contest-card card-2">
-                        <div class="dot codeforces"></div>
-                        <div class="card-info">
-                            <span class="platform">Codeforces</span>
-                            <span class="title">Div 2 Round #952</span>
-                            <span class="time">in 5 hours</span>
-                        </div>
-                    </div>
-                    <div class="contest-card card-3">
-                        <div class="dot atcoder"></div>
-                        <div class="card-info">
-                            <span class="platform">AtCoder</span>
-                            <span class="title">ABC 358</span>
-                            <span class="time">tomorrow</span>
-                        </div>
-                    </div>
-                </div>
+      <section class="hero" id="hero">
+        <div class="hero-bg"></div>
+        <div class="container hero-container">
+          <div class="hero-content">
+            <p class="hc-prompt">contestsync --status</p>
+            <div class="badge">Automatic Contest Sync</div>
+            <h1 class="hero-title">
+              <span class="line">Never miss a</span>
+              <span class="line offset">coding contest</span>
+              <span class="line underlined"
+                >again.<span class="hc-cursor"></span
+              ></span>
+            </h1>
+            <p class="hero-subtext">
+              Connect Google. Pick your platforms. Contests appear in your
+              calendar. That's it.
+            </p>
+            <div class="hero-actions">
+              <a href="/auth/google" class="btn btn-primary"
+                >Connect With Google
+                <svg
+                  class="icon-ext"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path
+                    d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
+                  />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" /></svg
+              ></a>
+              <a href="#problem" class="btn btn-ghost"
+                >See how it works
+                <svg
+                  class="icon-ext"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="6 9 12 15 18 9" /></svg
+              ></a>
             </div>
-            <div class="scroll-indicator">
-                <div class="scroll-line"></div>
-                <span>scroll</span>
+          </div>
+          <div class="hero-visual">
+            <div class="contest-card card-1">
+              <div class="dot leetcode"></div>
+              <div class="card-info">
+                <span class="platform">LeetCode</span>
+                <span class="title">Weekly Contest 400</span>
+                <span class="time">in 2 days</span>
+              </div>
             </div>
-        </section>
+            <div class="contest-card card-2">
+              <div class="dot codeforces"></div>
+              <div class="card-info">
+                <span class="platform">Codeforces</span>
+                <span class="title">Div 2 Round #952</span>
+                <span class="time">in 5 hours</span>
+              </div>
+            </div>
+            <div class="contest-card card-3">
+              <div class="dot atcoder"></div>
+              <div class="card-info">
+                <span class="platform">AtCoder</span>
+                <span class="title">ABC 358</span>
+                <span class="time">tomorrow</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="scroll-indicator">
+          <div class="scroll-line"></div>
+          <span>scroll</span>
+        </div>
+      </section>
 
-        <section class="problem" id="problem">
-            <div class="container">
-                    <div class="reveal-wrap">
-                        <h2 class="section-title txt-reveal">The problem with contest tracking</h2>
-                    </div>
-                <div class="problem-grid">
-                    <div class="problem-card">
-                        <div class="icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-                        <h3>Contests slip through</h3>
-                        <p>You're deep in a problem set when the contest starts. You find out after.</p>
-                    </div>
-                    <div class="problem-card">
-                        <div class="icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
-                        <h3>Timezone math is hard</h3>
-                        <p>Is it 2:30 AM your time? 10:30 PM? You convert it wrong and miss it anyway.</p>
-                    </div>
-                    <div class="problem-card">
-                        <div class="icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
-                        <h3>Too many platforms</h3>
-                        <p>LeetCode Sunday. Codeforces Saturday. AtCoder every other week. No single view.</p>
-                    </div>
-                    <div class="problem-card">
-                        <div class="icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-                        <h3>Manual sync is tedious</h3>
-                        <p>Adding each contest to your calendar by hand stops being worth it after the second time.</p>
-                    </div>
-                </div>
+      <section class="problem" id="problem">
+        <div class="container">
+          <div class="reveal-wrap">
+            <h2 class="section-title txt-reveal">
+              The problem with contest tracking
+            </h2>
+          </div>
+          <div class="problem-grid">
+            <div class="problem-card">
+              <div class="icon">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <h3>Contests slip through</h3>
+              <p>
+                You're deep in a problem set when the contest starts. You find
+                out after.
+              </p>
             </div>
-        </section>
+            <div class="problem-card">
+              <div class="icon">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <path
+                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+                  />
+                </svg>
+              </div>
+              <h3>Timezone math is hard</h3>
+              <p>
+                Is it 2:30 AM your time? 10:30 PM? You convert it wrong and miss
+                it anyway.
+              </p>
+            </div>
+            <div class="problem-card">
+              <div class="icon">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                </svg>
+              </div>
+              <h3>Too many platforms</h3>
+              <p>
+                LeetCode Sunday. Codeforces Saturday. AtCoder every other week.
+                No single view.
+              </p>
+            </div>
+            <div class="problem-card">
+              <div class="icon">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+              </div>
+              <h3>Manual sync is tedious</h3>
+              <p>
+                Adding each contest to your calendar by hand stops being worth
+                it after the second time.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <section class="solution" id="solution">
-            <div class="container solution-container">
-                <div class="solution-left">
-                    <h2 class="section-title txt-reveal">Built for simplicity</h2>
-                    <p class="section-desc">Automate your competitive programming schedule in seconds.</p>
+      <section class="solution" id="solution">
+        <div class="container solution-container">
+          <div class="solution-left">
+            <h2 class="section-title txt-reveal">Built for simplicity</h2>
+            <p class="section-desc">
+              Automate your competitive programming schedule in seconds.
+            </p>
+          </div>
+          <div class="solution-right">
+            <div class="step-flow">
+              <div class="step" id="step-1">
+                <div class="step-num">01</div>
+                <div class="step-content">
+                  <h3>Connect Google</h3>
+                  <p>Secure OAuth connection to access your calendar.</p>
                 </div>
-                <div class="solution-right">
-                    <div class="step-flow">
-                        <div class="step" id="step-1">
-                            <div class="step-num">01</div>
-                            <div class="step-content">
-                                <h3>Connect Google</h3>
-                                <p>Secure OAuth connection to access your calendar.</p>
-                            </div>
-                        </div>
-                        <div class="step-line-wrap">
-                            <svg class="step-line" viewBox="0 0 2 60" preserveAspectRatio="none">
-                                <line class="line-bg" x1="1" y1="0" x2="1" y2="60" />
-                                <line class="line-fg" x1="1" y1="0" x2="1" y2="60" />
-                            </svg>
-                        </div>
-                        <div class="step">
-                            <div class="step-num">02</div>
-                            <div class="step-content">
-                                <h3>Select your platforms</h3>
-                                <p>Choose from LeetCode, Codeforces, CodeChef, and more.</p>
-                            </div>
-                        </div>
-                        <div class="step-line-wrap">
-                            <svg class="step-line" viewBox="0 0 2 60" preserveAspectRatio="none">
-                                <line class="line-bg" x1="1" y1="0" x2="1" y2="60" />
-                                <line class="line-fg" x1="1" y1="0" x2="1" y2="60" />
-                            </svg>
-                        </div>
-                        <div class="step">
-                            <div class="step-num">03</div>
-                            <div class="step-content">
-                                <h3>Contests in your calendar</h3>
-                                <p>Everything synced automatically. Focus on the code.</p>
-                            </div>
-                        </div>
-                    </div>
+              </div>
+              <div class="step-line-wrap">
+                <svg
+                  class="step-line"
+                  viewBox="0 0 2 60"
+                  preserveAspectRatio="none"
+                >
+                  <line class="line-bg" x1="1" y1="0" x2="1" y2="60" />
+                  <line class="line-fg" x1="1" y1="0" x2="1" y2="60" />
+                </svg>
+              </div>
+              <div class="step">
+                <div class="step-num">02</div>
+                <div class="step-content">
+                  <h3>Select your platforms</h3>
+                  <p>Choose from LeetCode, Codeforces, CodeChef, and more.</p>
                 </div>
+              </div>
+              <div class="step-line-wrap">
+                <svg
+                  class="step-line"
+                  viewBox="0 0 2 60"
+                  preserveAspectRatio="none"
+                >
+                  <line class="line-bg" x1="1" y1="0" x2="1" y2="60" />
+                  <line class="line-fg" x1="1" y1="0" x2="1" y2="60" />
+                </svg>
+              </div>
+              <div class="step">
+                <div class="step-num">03</div>
+                <div class="step-content">
+                  <h3>Contests in your calendar</h3>
+                  <p>Everything synced automatically. Focus on the code.</p>
+                </div>
+              </div>
             </div>
-        </section>
+          </div>
+        </div>
+      </section>
 
-        <section class="platforms" id="platforms">
-            <div class="container">
-                <h2 class="section-title centered txt-reveal">All your platforms</h2>
-                <div class="platform-grid">
-                    <div class="platform-card" style="--pcolor:var(--platform-leetcode)">
-                        <span class="p-name">LeetCode</span>
-                        <span class="p-freq">Weekly + Biweekly</span>
-                    </div>
-                    <div class="platform-card" style="--pcolor:var(--platform-codeforces)">
-                        <span class="p-name">Codeforces</span>
-                        <span class="p-freq">Rounds several times a week</span>
-                    </div>
-                    <div class="platform-card" style="--pcolor:var(--platform-codechef)">
-                        <span class="p-name">CodeChef</span>
-                        <span class="p-freq">Monthly Long + Starters</span>
-                    </div>
-                    <div class="platform-card" style="--pcolor:var(--platform-atcoder)">
-                        <span class="p-name">AtCoder</span>
-                        <span class="p-freq">ABC / ARC / AGC series</span>
-                    </div>
-                    <div class="platform-card" style="--pcolor:var(--platform-hackerrank)">
-                        <span class="p-name">HackerRank</span>
-                        <span class="p-freq">Weekly Challenges</span>
-                    </div>
-                    <div class="platform-card" style="--pcolor:var(--platform-gfg)">
-                        <span class="p-name">GeeksforGeeks</span>
-                        <span class="p-freq">Weekly Contests</span>
-                    </div>
-                    <div class="platform-card" style="--pcolor:var(--platform-code360)">
-                        <span class="p-name">Code360</span>
-                        <span class="p-freq">Weekly Contests</span>
-                    </div>
-                </div>
+      <section class="platforms" id="platforms">
+        <div class="container">
+          <h2 class="section-title centered txt-reveal">All your platforms</h2>
+          <div class="platform-grid">
+            <div
+              class="platform-card"
+              style="--pcolor: var(--platform-leetcode)"
+            >
+              <span class="p-name">LeetCode</span>
+              <span class="p-freq">Weekly + Biweekly</span>
             </div>
-        </section>
+            <div
+              class="platform-card"
+              style="--pcolor: var(--platform-codeforces)"
+            >
+              <span class="p-name">Codeforces</span>
+              <span class="p-freq">Rounds several times a week</span>
+            </div>
+            <div
+              class="platform-card"
+              style="--pcolor: var(--platform-codechef)"
+            >
+              <span class="p-name">CodeChef</span>
+              <span class="p-freq">Monthly Long + Starters</span>
+            </div>
+            <div
+              class="platform-card"
+              style="--pcolor: var(--platform-atcoder)"
+            >
+              <span class="p-name">AtCoder</span>
+              <span class="p-freq">ABC / ARC / AGC series</span>
+            </div>
+            <div
+              class="platform-card"
+              style="--pcolor: var(--platform-hackerrank)"
+            >
+              <span class="p-name">HackerRank</span>
+              <span class="p-freq">Weekly Challenges</span>
+            </div>
+            <div class="platform-card" style="--pcolor: var(--platform-gfg)">
+              <span class="p-name">GeeksforGeeks</span>
+              <span class="p-freq">Weekly Contests</span>
+            </div>
+            <div
+              class="platform-card"
+              style="--pcolor: var(--platform-code360)"
+            >
+              <span class="p-name">Code360</span>
+              <span class="p-freq">Weekly Contests</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <section class="calendar-preview" id="calendar">
-            <div class="container">
-                <h2 class="section-title centered txt-reveal">This is what your week looks like.</h2>
-                <div class="terminal-window">
-                    <div class="hc-chrome">
-                        <div class="dots">
-                            <span class="dot red"></span>
-                            <span class="dot yellow"></span>
-                            <span class="dot green"></span>
-                        </div>
-                        <div>~/contestsync · calendar · 80x24</div>
-                    </div>
-                    <div class="fake-calendar">
-                        <div class="cal-header">
-                            <span>Week of May 19 – 25</span>
-                            <span>May ▾</span>
-                        </div>
-                        <div class="cal-grid">
-                            <div class="cal-row labels">
-                                <div></div>
-                                <div>Mon 19</div>
-                                <div>Tue 20</div>
-                                <div>Wed 21</div>
-                                <div>Thu 22</div>
-                                <div>Fri 23</div>
-                                <div>Sat 24</div>
-                                <div>Sun 25</div>
-                            </div>
-                            <div class="cal-row">
-                                <div class="time-lbl">2AM</div>
-                                <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
-                            </div>
-                            <div class="cal-row">
-                                <div class="time-lbl">3AM</div>
-                                <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"><div class="event leetcode">LeetCode Weekly</div></div>
-                            </div>
-                            <div class="cal-row">
-                                <div class="time-lbl">...</div>
-                                <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
-                            </div>
-                            <div class="cal-row">
-                                <div class="time-lbl">8PM</div>
-                                <div class="cell"></div>
-                                <div class="cell"><div class="event codeforces">Codeforces Div 2</div></div>
-                                <div class="cell"><div class="event codechef">CodeChef Starters</div></div>
-                                <div class="cell"></div>
-                                <div class="cell"><div class="event code360">Code360 Weekly</div></div>
-                                <div class="cell"><div class="event atcoder">AtCoder ABC 406</div></div>
-                                <div class="cell"></div>
-                            </div>
-                        </div>
-                    </div>
+      <section class="calendar-preview" id="calendar">
+        <div class="container">
+          <h2 class="section-title centered txt-reveal">
+            This is what your week looks like.
+          </h2>
+          <div class="terminal-window">
+            <div class="hc-chrome">
+              <div class="dots">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+              </div>
+              <div>~/contestsync · calendar · 80x24</div>
+            </div>
+            <div class="fake-calendar">
+              <div class="cal-header">
+                <span>Week of May 19 – 25</span>
+                <span>May ▾</span>
+              </div>
+              <div class="cal-grid">
+                <div class="cal-row labels">
+                  <div></div>
+                  <div>Mon 19</div>
+                  <div>Tue 20</div>
+                  <div>Wed 21</div>
+                  <div>Thu 22</div>
+                  <div>Fri 23</div>
+                  <div>Sat 24</div>
+                  <div>Sun 25</div>
                 </div>
+                <div class="cal-row">
+                  <div class="time-lbl">2AM</div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                </div>
+                <div class="cal-row">
+                  <div class="time-lbl">3AM</div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell">
+                    <div class="event leetcode">LeetCode Weekly</div>
+                  </div>
+                </div>
+                <div class="cal-row">
+                  <div class="time-lbl">...</div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                  <div class="cell"></div>
+                </div>
+                <div class="cal-row">
+                  <div class="time-lbl">8PM</div>
+                  <div class="cell"></div>
+                  <div class="cell">
+                    <div class="event codeforces">Codeforces Div 2</div>
+                  </div>
+                  <div class="cell">
+                    <div class="event codechef">CodeChef Starters</div>
+                  </div>
+                  <div class="cell"></div>
+                  <div class="cell">
+                    <div class="event code360">Code360 Weekly</div>
+                  </div>
+                  <div class="cell">
+                    <div class="event atcoder">AtCoder ABC 406</div>
+                  </div>
+                  <div class="cell"></div>
+                </div>
+              </div>
             </div>
-        </section>
+          </div>
+        </div>
+      </section>
 
-        <section class="final-cta">
-            <div class="container centered">
-                <h2 class="cta-title txt-reveal">Your next contest is<br><span class="underlined">already waiting.</span></h2>
-                <p class="hero-subtext">Connect once. Sync forever. Free.</p>
-                <a href="/auth/google" class="btn btn-primary btn-lg">Connect With Google <svg class="icon-ext" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>
-                <p class="reassurance">No credit card. No account. Just Google.</p>
-            </div>
-        </section>
+      <section class="final-cta">
+        <div class="container centered">
+          <h2 class="cta-title txt-reveal">
+            Your next contest is<br /><span class="underlined"
+              >already waiting.</span
+            >
+          </h2>
+          <p class="hero-subtext">Connect once. Sync forever. Free.</p>
+          <a href="/auth/google" class="btn btn-primary btn-lg"
+            >Connect With Google
+            <svg
+              class="icon-ext"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
+              />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" /></svg
+          ></a>
+          <p class="reassurance">No credit card. No account. Just Google.</p>
+        </div>
+      </section>
     </main>
 
     <footer class="footer">
-        <div class="container" style="display:flex; flex-direction:column; gap:1rem; align-items:center;">
-            <p>&copy; 2026 ContestSync. Built for winners.</p>
-            <div class="footer-links" style="display:flex; gap:1.5rem; font-size:var(--t-label); color:var(--text-secondary);">
-                <a href="about.html" style="text-decoration:none;">About</a>
-                <a href="privacy.html" style="text-decoration:none;">Privacy Policy</a>
-                <a href="terms.html" style="text-decoration:none;">Terms of Service</a>
-            </div>
+      <div
+        class="container"
+        style="
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          align-items: center;
+        "
+      >
+        <p>&copy; 2026 ContestSync. Built for winners.</p>
+        <div
+          class="footer-links"
+          style="
+            display: flex;
+            gap: 1.5rem;
+            font-size: var(--t-label);
+            color: var(--text-secondary);
+          "
+        >
+          <a href="about.html" style="text-decoration: none">About</a>
+          <a href="privacy.html" style="text-decoration: none"
+            >Privacy Policy</a
+          >
+          <a href="terms.html" style="text-decoration: none"
+            >Terms of Service</a
+          >
         </div>
+      </div>
     </footer>
-</body>
+  </body>
 </html>
