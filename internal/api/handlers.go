@@ -28,6 +28,7 @@ type Handlers struct {
 	SessionSecret []byte
 	Queue         *queue.Queue
 	Valkey        *redis.Client
+	Env           string
 }
 
 func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +63,7 @@ func (h *Handlers) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    state,
 		Path:     "/auth/google/callback",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.Env != "development" && h.Env != "dev" && h.Env != "local",
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   600,
 	}

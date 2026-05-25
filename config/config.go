@@ -25,9 +25,10 @@ type Config struct {
 	KafkaPort          string
 	KafkaAccessKey     []byte
 	KafkaAccessCert    []byte
-	KafkaCACert        []byte
-	KafkaPartitions    int
-	ValkeyURI          string
+	KafkaCACert            []byte
+	KafkaPartitions        int
+	KafkaReplicationFactor int
+	ValkeyURI              string
 }
 
 func Load() *Config {
@@ -43,6 +44,11 @@ func Load() *Config {
 	kafkaPartitions, err := strconv.Atoi(os.Getenv("KAFKA_PARTITIONS"))
 	if err != nil || kafkaPartitions <= 0 {
 		kafkaPartitions = 4
+	}
+
+	kafkaRepFactor, err := strconv.Atoi(os.Getenv("KAFKA_REPLICATION_FACTOR"))
+	if err != nil || kafkaRepFactor <= 0 {
+		kafkaRepFactor = 1
 	}
 
 	connLimit, _ := strconv.Atoi(os.Getenv("CONNECTION_LIMIT"))
@@ -92,8 +98,9 @@ func Load() *Config {
 		KafkaPort:          os.Getenv("KAFKA_PORT"),
 		KafkaAccessKey:     kafkaAccessKey,
 		KafkaAccessCert:    kafkaAccessCert,
-		KafkaCACert:        kafkaCACert,
-		KafkaPartitions:    kafkaPartitions,
-		ValkeyURI:          os.Getenv("VALKEY_URI"),
+		KafkaCACert:            kafkaCACert,
+		KafkaPartitions:        kafkaPartitions,
+		KafkaReplicationFactor: kafkaRepFactor,
+		ValkeyURI:              os.Getenv("VALKEY_URI"),
 	}
 }

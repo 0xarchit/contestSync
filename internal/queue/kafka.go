@@ -80,7 +80,9 @@ func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, err
 		Async: false,
 	}
 
-	_ = ensureTopics(cfg, tlsConfig, broker)
+	if err := ensureTopics(cfg, tlsConfig, broker); err != nil {
+		return nil, fmt.Errorf("failed to ensure kafka topics: %w", err)
+	}
 
 	return &Queue{
 		Producer:    writer,
@@ -104,24 +106,31 @@ func ensureTopics(cfg *config.Config, tlsConfig *tls.Config, broker string) erro
 		return err
 	}
 	defer conn.Close()
-	topicConfigs := []kafka.TopicConfig{
-		{Topic: TopicExtraction, NumPartitions: 1, ReplicationFactor: 3},
-		{Topic: TopicSync, NumPartitions: cfg.KafkaPartitions, ReplicationFactor: 3},
-		{Topic: TopicHealth, NumPartitions: 1, ReplicationFactor: 3},
-	}
-	err = conn.CreateTopics(topicConfigs...)
+	partitions, err := conn.ReadPartitions()
 	if err != nil {
-		topicConfigs1 := []kafka.TopicConfig{
-			{Topic: TopicExtraction, NumPartitions: 1, ReplicationFactor: 1},
-			{Topic: TopicSync, NumPartitions: cfg.KafkaPartitions, ReplicationFactor: 1},
-			{Topic: TopicHealth, NumPartitions: 1, ReplicationFactor: 1},
+		return err
+	}
+	existing := make(map[string]bool)
+	for _, p := range partitions {
+		existing[p.Topic] = true
+	}
+
+	var toCreate []kafka.TopicConfig
+	if !existing[TopicExtraction] {
+		toCreate = append(toCreate, kafka.TopicConfig{Topic: TopicExtraction, NumPartitions: 1, ReplicationFactor: cfg.KafkaReplicationFactor})
+	}
+	if !existing[TopicSync] {
+		toCreate = append(toCreate, kafka.TopicConfig{Topic: TopicSync, NumPartitions: cfg.KafkaPartitions, ReplicationFactor: cfg.KafkaReplicationFactor})
+	}
+	if !existing[TopicHealth] {
+		toCreate = append(toCreate, kafka.TopicConfig{Topic: TopicHealth, NumPartitions: 1, ReplicationFactor: cfg.KafkaReplicationFactor})
+	}
+
+	if len(toCreate) > 0 {
+		if err := conn.CreateTopics(toCreate...); err != nil {
+			return err
 		}
-		err2 := conn.CreateTopics(topicConfigs1...)
-		if err2 != nil {
-			slog.Warn("could not auto-create kafka topics", "err", err2)
-		}
-	} else {
-		slog.Info("successfully created kafka topics")
+		slog.Info("successfully created missing kafka topics")
 	}
 	return nil
 }

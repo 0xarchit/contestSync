@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -81,17 +82,19 @@ func (rl *rateLimiter) limit(ip string, max int, duration time.Duration) bool {
 var globalLimiter = &rateLimiter{cap: 10000}
 
 func getClientIP(r *http.Request) string {
-	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
-		return ip
-	}
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-		if comma := strings.Index(ip, ","); comma != -1 {
-			return strings.TrimSpace(ip[:comma])
+	if os.Getenv("TRUST_PROXY") == "true" {
+		if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+			return ip
 		}
-		return ip
-	}
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return ip
+		if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+			if comma := strings.Index(ip, ","); comma != -1 {
+				return strings.TrimSpace(ip[:comma])
+			}
+			return ip
+		}
+		if ip := r.Header.Get("X-Real-IP"); ip != "" {
+			return ip
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

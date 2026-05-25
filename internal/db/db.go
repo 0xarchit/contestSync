@@ -2,10 +2,9 @@ package db
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -15,27 +14,20 @@ func Init(ctx context.Context, databaseURL string, caCert []byte, connectionLimi
 		return nil, fmt.Errorf("POSTGRES_DB environment variable is not set")
 	}
 
-	finalDSN := databaseURL
-
-	if len(caCert) > 0 {
-		tempDir := os.TempDir()
-		certPath := filepath.Join(tempDir, "aiven-ca.pem")
-		
-		if err := os.WriteFile(certPath, caCert, 0600); err != nil {
-			return nil, fmt.Errorf("failed to write CA certificate: %w", err)
-		}
-
-		// Inject sslrootcert into connection string
-		if strings.Contains(finalDSN, "?") {
-			finalDSN += "&sslrootcert=" + certPath
-		} else {
-			finalDSN += "?sslrootcert=" + certPath
-		}
-	}
-
-	config, err := pgxpool.ParseConfig(finalDSN)
+	config, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse database DSN: %w", err)
+	}
+
+	if len(caCert) > 0 {
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to parse CA certificate PEM")
+		}
+		if config.ConnConfig.TLSConfig == nil {
+			config.ConnConfig.TLSConfig = &tls.Config{}
+		}
+		config.ConnConfig.TLSConfig.RootCAs = caCertPool
 	}
 
 	maxConns := int32(10)
