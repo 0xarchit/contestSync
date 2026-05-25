@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"database/sql"
 	"encoding/base32"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -52,15 +53,51 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 		defer s.syncingUsers.Delete(userID)
 	}
 
-	var user models.User
-	var encryptedRefreshToken string
-	var calendarID sql.NullString
-	var platforms []string
+	var cachedUser models.CachedUser
+	cacheKey := models.UserCacheKey(userID)
+	cacheFound := false
 
-	err := s.DB.QueryRow(ctx, "SELECT id, email, refresh_token, calendar_id, use_dedicated, platforms FROM users WHERE id = $1", userID).Scan(&user.ID, &user.Email, &encryptedRefreshToken, &calendarID, &user.UseDedicated, &platforms)
-	if err != nil {
-		return err
+	if s.Valkey != nil {
+		cachedVal, err := s.Valkey.Get(ctx, cacheKey).Result()
+		if err == nil {
+			if err := json.Unmarshal([]byte(cachedVal), &cachedUser); err == nil {
+				cacheFound = true
+			}
+		}
 	}
+
+	if !cacheFound {
+		var dbCalendarID sql.NullString
+		var dbEncryptedRefreshToken string
+		err := s.DB.QueryRow(ctx, "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, refresh_token FROM users WHERE id = $1", userID).Scan(
+			&cachedUser.ID, &cachedUser.GoogleID, &cachedUser.Email, &dbCalendarID, &cachedUser.UseDedicated, &cachedUser.Platforms, &dbEncryptedRefreshToken,
+		)
+		if err != nil {
+			return err
+		}
+		cachedUser.CalendarID = ""
+		if dbCalendarID.Valid {
+			cachedUser.CalendarID = dbCalendarID.String
+		}
+		cachedUser.RefreshToken = dbEncryptedRefreshToken
+
+		if s.Valkey != nil {
+			if serialized, err := json.Marshal(cachedUser); err == nil {
+				if err := s.Valkey.Set(ctx, cacheKey, string(serialized), models.UserCacheTTL).Err(); err != nil {
+					slog.Error("failed to write user cache in sync", "user_id", userID, "error", err)
+				}
+			}
+		}
+	}
+
+	var user models.User
+	user.ID = cachedUser.ID
+	user.GoogleID = cachedUser.GoogleID
+	user.Email = cachedUser.Email
+	user.CalendarID = cachedUser.CalendarID
+	user.UseDedicated = cachedUser.UseDedicated
+	encryptedRefreshToken := cachedUser.RefreshToken
+	platforms := cachedUser.Platforms
 
 	s.DB.Exec(ctx, "UPDATE users SET sync_status = 'syncing' WHERE id = $1", userID)
 
@@ -94,8 +131,8 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 
 	user.CalendarID = "primary"
 	if user.UseDedicated {
-		if calendarID.Valid && calendarID.String != "" && calendarID.String != "primary" {
-			user.CalendarID = calendarID.String
+		if cachedUser.CalendarID != "" && cachedUser.CalendarID != "primary" {
+			user.CalendarID = cachedUser.CalendarID
 		} else {
 			newCal := &calendar.Calendar{
 				Summary:  "ContestSync",
@@ -105,6 +142,12 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 			if err == nil {
 				user.CalendarID = createdCal.Id
 				s.DB.Exec(ctx, "UPDATE users SET calendar_id = $1 WHERE id = $2", createdCal.Id, userID)
+				if s.Valkey != nil {
+					cacheKey := models.UserCacheKey(userID)
+					if err := s.Valkey.Del(ctx, cacheKey).Err(); err != nil {
+						slog.Error("failed to invalidate user cache after calendar creation", "user_id", userID, "error", err)
+					}
+				}
 			} else {
 				slog.Error("failed to create dedicated calendar", "user_id", userID, "error", err)
 			}
@@ -129,22 +172,58 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 		return nil
 	}
 
-	rows, err = s.DB.Query(ctx, "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW()", platforms)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
 	var contests []models.Contest
-	for rows.Next() {
-		var c models.Contest
-		if err := rows.Scan(&c.ID, &c.Name, &c.URL, &c.StartTime, &c.EndTime, &c.Platform); err != nil {
-			slog.Error("failed to scan contest row", "error", err)
-			continue
+	if s.Valkey != nil {
+		for _, p := range platforms {
+			cacheKey := models.ContestsCacheKey(p)
+			val, err := s.Valkey.Get(ctx, cacheKey).Result()
+			if err == nil {
+				var platformContests []models.Contest
+				if err := json.Unmarshal([]byte(val), &platformContests); err == nil {
+					contests = append(contests, platformContests...)
+					continue
+				}
+			}
+
+			dbRows, err := s.DB.Query(ctx, "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = $1 AND start_time > NOW()", p)
+			if err != nil {
+				return err
+			}
+			var platformContests []models.Contest
+			for dbRows.Next() {
+				var c models.Contest
+				if err := dbRows.Scan(&c.ID, &c.Name, &c.URL, &c.StartTime, &c.EndTime, &c.Platform); err != nil {
+					slog.Error("failed to scan contest row", "error", err)
+					continue
+				}
+				platformContests = append(platformContests, c)
+			}
+			dbRows.Close()
+
+			if serialized, err := json.Marshal(platformContests); err == nil {
+				if err := s.Valkey.Set(ctx, cacheKey, string(serialized), models.ContestsCacheTTL).Err(); err != nil {
+					slog.Error("failed to write contests cache", "key", cacheKey, "error", err)
+				}
+			}
+			contests = append(contests, platformContests...)
 		}
-		contests = append(contests, c)
+	} else {
+		rows, err = s.DB.Query(ctx, "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW()", platforms)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var c models.Contest
+			if err := rows.Scan(&c.ID, &c.Name, &c.URL, &c.StartTime, &c.EndTime, &c.Platform); err != nil {
+				slog.Error("failed to scan contest row", "error", err)
+				continue
+			}
+			contests = append(contests, c)
+		}
+		rows.Close()
 	}
-	rows.Close()
 
 	for _, c := range contests {
 		if syncedMap[c.ID] {

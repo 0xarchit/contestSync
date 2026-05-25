@@ -18,6 +18,7 @@ import (
 	"github.com/gorilla/sessions"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
+	"github.com/redis/go-redis/v9"
 )
 
 type Handlers struct {
@@ -26,6 +27,7 @@ type Handlers struct {
 	AuthProvider  *auth.Provider
 	SessionSecret []byte
 	Queue         *queue.Queue
+	Valkey        *redis.Client
 }
 
 func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +142,13 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.Valkey != nil {
+		cacheKey := models.UserCacheKey(userID)
+		if err := h.Valkey.Del(r.Context(), cacheKey).Err(); err != nil {
+			slog.Error("failed to invalidate user cache after oauth upsert", "user_id", userID, "error", err)
+		}
+	}
+
 	// Create session
 	session, err := h.SessionStore.Get(r, "session")
 	if err != nil {
@@ -184,23 +193,56 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := val.(int)
 
+	var cachedUser models.CachedUser
+	cacheKey := models.UserCacheKey(userID)
+	cacheFound := false
+
+	if h.Valkey != nil {
+		cachedVal, err := h.Valkey.Get(r.Context(), cacheKey).Result()
+		if err == nil {
+			if err := json.Unmarshal([]byte(cachedVal), &cachedUser); err == nil {
+				cacheFound = true
+			}
+		}
+	}
+
+	if !cacheFound {
+		var calendarID sql.NullString
+		var encryptedRefreshToken string
+		err := h.DB.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, refresh_token FROM users WHERE id = $1", userID).Scan(
+			&cachedUser.ID, &cachedUser.GoogleID, &cachedUser.Email, &calendarID, &cachedUser.UseDedicated, &cachedUser.Platforms, &encryptedRefreshToken,
+		)
+		if err != nil {
+			slog.Error("failed to fetch user", "user_id", userID, "error", err)
+			http.Error(w, `{"error":"user not found"}`, http.StatusNotFound)
+			return
+		}
+		cachedUser.CalendarID = ""
+		if calendarID.Valid {
+			cachedUser.CalendarID = calendarID.String
+		}
+		cachedUser.RefreshToken = encryptedRefreshToken
+
+		if h.Valkey != nil {
+			if serialized, err := json.Marshal(cachedUser); err == nil {
+				if err := h.Valkey.Set(r.Context(), cacheKey, string(serialized), models.UserCacheTTL).Err(); err != nil {
+					slog.Error("failed to write user cache", "user_id", userID, "error", err)
+				}
+			}
+		}
+	}
+
 	var user struct {
 		models.User
 		Platforms []string `json:"platforms"`
 		CSRFToken string   `json:"csrf_token"`
 	}
-	var calendarID sql.NullString
-	err := h.DB.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms FROM users WHERE id = $1", userID).Scan(&user.ID, &user.GoogleID, &user.Email, &calendarID, &user.UseDedicated, &user.Platforms)
-	if err != nil {
-		slog.Error("failed to fetch user", "user_id", userID, "error", err)
-		http.Error(w, `{"error":"user not found"}`, http.StatusNotFound)
-		return
-	}
-
-	user.CalendarID = ""
-	if calendarID.Valid {
-		user.CalendarID = calendarID.String
-	}
+	user.ID = cachedUser.ID
+	user.GoogleID = cachedUser.GoogleID
+	user.Email = cachedUser.Email
+	user.CalendarID = cachedUser.CalendarID
+	user.UseDedicated = cachedUser.UseDedicated
+	user.Platforms = cachedUser.Platforms
 
 	session, err := h.SessionStore.Get(r, "session")
 	if err == nil {
@@ -236,6 +278,13 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to delete user account", "user_id", userID, "error", err)
 		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
 		return
+	}
+
+	if h.Valkey != nil {
+		cacheKey := models.UserCacheKey(userID)
+		if err := h.Valkey.Del(r.Context(), cacheKey).Err(); err != nil {
+			slog.Error("failed to invalidate user cache on account deletion", "user_id", userID, "error", err)
+		}
 	}
 
 	// Clear session
@@ -283,6 +332,13 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to update user platforms", "user_id", userID, "error", err)
 		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
 		return
+	}
+
+	if h.Valkey != nil {
+		cacheKey := models.UserCacheKey(userID)
+		if err := h.Valkey.Del(r.Context(), cacheKey).Err(); err != nil {
+			slog.Error("failed to invalidate user cache on preference update", "user_id", userID, "error", err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

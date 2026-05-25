@@ -306,7 +306,9 @@ func (s *ValkeyStore) New(r *http.Request, name string) (*sessions.Session, erro
 func (s *ValkeyStore) Save(r *http.Request, w http.ResponseWriter, session *sessions.Session) error {
 	if session.Options.MaxAge < 0 {
 		if session.ID != "" {
-			s.client.Del(r.Context(), "session:"+session.ID)
+			if err := s.client.Del(r.Context(), "session:"+session.ID).Err(); err != nil {
+				slog.Error("failed to delete session from valkey", "session_id", session.ID, "error", err)
+			}
 			session.ID = ""
 		}
 		http.SetCookie(w, sessions.NewCookie(session.Name(), "", session.Options))

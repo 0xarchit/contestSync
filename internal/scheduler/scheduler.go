@@ -6,6 +6,7 @@ import (
 
 	"github.com/0xarchit/contestsync/internal/extractor"
 	"github.com/0xarchit/contestsync/internal/queue"
+	"github.com/0xarchit/contestsync/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 )
@@ -42,7 +43,6 @@ func (s *Scheduler) Start() {
 
 func (s *Scheduler) PruneOldData(ctx context.Context) {
 	slog.Info("starting data pruning task")
-	// Delete contests older than 30 days
 	res, err := s.DB.Exec(ctx, "DELETE FROM contests WHERE end_time < NOW() - INTERVAL '30 days'")
 	if err != nil {
 		slog.Error("failed to prune old contests", "error", err)
@@ -50,7 +50,14 @@ func (s *Scheduler) PruneOldData(ctx context.Context) {
 		slog.Info("pruned old contests", "count", res.RowsAffected())
 	}
 
-	// synced_events will be pruned via ON DELETE CASCADE on contest_id
+	if s.Queue != nil && s.Queue.Syncer != nil && s.Queue.Syncer.Valkey != nil {
+		for _, platform := range extractor.Platforms {
+			cacheKey := models.ContestsCacheKey(platform)
+			if err := s.Queue.Syncer.Valkey.Del(ctx, cacheKey).Err(); err != nil {
+				slog.Error("failed to invalidate contests cache on prune", "platform", platform, "error", err)
+			}
+		}
+	}
 }
 
 func (s *Scheduler) CleanupOAuthStates(ctx context.Context) {

@@ -13,6 +13,7 @@ import (
 	"github.com/0xarchit/contestsync/config"
 	"github.com/0xarchit/contestsync/internal/extractor"
 	"github.com/0xarchit/contestsync/internal/sync"
+	"github.com/0xarchit/contestsync/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/segmentio/kafka-go"
@@ -413,6 +414,13 @@ func (q *Queue) handleExtraction(ctx context.Context, platform string) {
 	for range contests {
 		if _, err := br.Exec(); err != nil {
 			slog.Error("failed to save batch contest in consumer", "error", err)
+		}
+	}
+
+	if q.Syncer != nil && q.Syncer.Valkey != nil {
+		cacheKey := models.ContestsCacheKey(platform)
+		if err := q.Syncer.Valkey.Del(ctx, cacheKey).Err(); err != nil {
+			slog.Error("failed to invalidate valkey cache", "platform", platform, "error", err)
 		}
 	}
 }
