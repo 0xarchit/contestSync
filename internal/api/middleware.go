@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -108,6 +109,8 @@ func RateLimitMiddleware(valkeyClient *redis.Client, max int, duration time.Dura
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := getClientIP(r)
 
+			retryAfter := strconv.Itoa(int(duration.Seconds()))
+
 			if valkeyClient != nil {
 				key := "ratelimit:" + ip
 				ctx := r.Context()
@@ -117,21 +120,21 @@ func RateLimitMiddleware(valkeyClient *redis.Client, max int, duration time.Dura
 				_, err := pipe.Exec(ctx)
 				if err == nil {
 					if incr.Val() > int64(max) {
-						w.Header().Set("Retry-After", "60")
+						w.Header().Set("Retry-After", retryAfter)
 						http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
 						return
 					}
 				} else {
 					slog.Error("valkey rate limiter error, falling back to local rate limiter", "error", err)
 					if !globalLimiter.limit(ip, max, duration) {
-						w.Header().Set("Retry-After", "60")
+						w.Header().Set("Retry-After", retryAfter)
 						http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
 						return
 					}
 				}
 			} else {
 				if !globalLimiter.limit(ip, max, duration) {
-					w.Header().Set("Retry-After", "60")
+					w.Header().Set("Retry-After", retryAfter)
 					http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
 					return
 				}
