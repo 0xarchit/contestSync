@@ -169,7 +169,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	serverFS := http.FileServer(http.FS(staticSub))
+	serverFS, err := api.NewStaticServer(staticSub)
+	if err != nil {
+		log.Fatal(err)
+	}
 	r.Handle("/*", serverFS)
 
 	srv := &http.Server{
