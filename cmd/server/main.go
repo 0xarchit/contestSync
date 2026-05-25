@@ -120,6 +120,7 @@ func main() {
 		SessionSecret: cfg.EncryptionKey,
 		Queue:         q,
 		Valkey:        valkeyClient,
+		Env:           cfg.Env,
 	}
 
 	sched := scheduler.New(pool, q)

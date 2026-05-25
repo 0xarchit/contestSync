@@ -174,6 +174,7 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 
 	var contests []models.Contest
 	if s.Valkey != nil {
+		var missedPlatforms []string
 		for _, p := range platforms {
 			cacheKey := models.ContestsCacheKey(p)
 			val, err := s.Valkey.Get(ctx, cacheKey).Result()
@@ -184,28 +185,38 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 					continue
 				}
 			}
+			missedPlatforms = append(missedPlatforms, p)
+		}
 
-			dbRows, err := s.DB.Query(ctx, "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = $1 AND start_time > NOW()", p)
+		if len(missedPlatforms) > 0 {
+			dbRows, err := s.DB.Query(ctx, "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW()", missedPlatforms)
 			if err != nil {
 				return err
 			}
-			var platformContests []models.Contest
+			platformMap := make(map[string][]models.Contest)
+			for _, p := range missedPlatforms {
+				platformMap[p] = []models.Contest{}
+			}
 			for dbRows.Next() {
 				var c models.Contest
 				if err := dbRows.Scan(&c.ID, &c.Name, &c.URL, &c.StartTime, &c.EndTime, &c.Platform); err != nil {
 					slog.Error("failed to scan contest row", "error", err)
 					continue
 				}
-				platformContests = append(platformContests, c)
+				platformMap[c.Platform] = append(platformMap[c.Platform], c)
 			}
 			dbRows.Close()
 
-			if serialized, err := json.Marshal(platformContests); err == nil {
-				if err := s.Valkey.Set(ctx, cacheKey, string(serialized), models.ContestsCacheTTL).Err(); err != nil {
-					slog.Error("failed to write contests cache", "key", cacheKey, "error", err)
+			for _, p := range missedPlatforms {
+				platformContests := platformMap[p]
+				cacheKey := models.ContestsCacheKey(p)
+				if serialized, err := json.Marshal(platformContests); err == nil {
+					if err := s.Valkey.Set(ctx, cacheKey, string(serialized), models.ContestsCacheTTL).Err(); err != nil {
+						slog.Error("failed to write contests cache", "key", cacheKey, "error", err)
+					}
 				}
+				contests = append(contests, platformContests...)
 			}
-			contests = append(contests, platformContests...)
 		}
 	} else {
 		rows, err = s.DB.Query(ctx, "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW()", platforms)
