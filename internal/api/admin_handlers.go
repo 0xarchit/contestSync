@@ -171,6 +171,8 @@ func checkValkey(ctx context.Context, client *redis.Client) error {
 		return fmt.Errorf("read returned unexpected value: %q", val)
 	}
 
-	client.Del(ctx, probeKey)
+	if err := client.Del(ctx, probeKey).Err(); err != nil {
+		slog.Error("failed to delete health check probe key", "key", probeKey, "error", err)
+	}
 	return nil
 }

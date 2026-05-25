@@ -119,6 +119,7 @@ func main() {
 		AuthProvider:  authProvider,
 		SessionSecret: cfg.EncryptionKey,
 		Queue:         q,
+		Valkey:        valkeyClient,
 	}
 
 	sched := scheduler.New(pool, q)

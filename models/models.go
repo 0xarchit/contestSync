@@ -1,8 +1,22 @@
 package models
 
 import (
+	"strconv"
 	"time"
 )
+
+const (
+	UserCacheTTL     = 24 * time.Hour
+	ContestsCacheTTL = 12 * time.Hour
+)
+
+func UserCacheKey(userID int) string {
+	return "cache:user:" + strconv.Itoa(userID)
+}
+
+func ContestsCacheKey(platform string) string {
+	return "cache:contests:" + platform
+}
 
 type User struct {
 	ID           int       `json:"id"`
@@ -13,6 +27,16 @@ type User struct {
 	UseDedicated bool      `json:"use_dedicated"`
 	Platforms    []string  `json:"platforms"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+type CachedUser struct {
+	ID           int      `json:"id"`
+	GoogleID     string   `json:"google_id"`
+	Email        string   `json:"email"`
+	RefreshToken string   `json:"refresh_token"`
+	CalendarID   string   `json:"calendar_id"`
+	UseDedicated bool     `json:"use_dedicated"`
+	Platforms    []string `json:"platforms"`
 }
 
 type Contest struct {
