@@ -237,6 +237,14 @@ func (q *Queue) PublishSyncTask(ctx context.Context, userID int) error {
 	})
 }
 
+func (q *Queue) InvalidateContestsCache(ctx context.Context, platform string) error {
+	if q.Syncer != nil && q.Syncer.Valkey != nil {
+		cacheKey := models.ContestsCacheKey(platform)
+		return q.Syncer.Valkey.Del(ctx, cacheKey).Err()
+	}
+	return nil
+}
+
 func (q *Queue) StartConsumers(ctx context.Context, cfg *config.Config) {
 	if q.useInMemory {
 		go q.consumeExtractionInMemory(ctx)

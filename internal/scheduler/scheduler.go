@@ -2,19 +2,21 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/0xarchit/contestsync/internal/extractor"
 	"github.com/0xarchit/contestsync/internal/queue"
-	"github.com/0xarchit/contestsync/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 )
 
 type Scheduler struct {
-	DB    *pgxpool.Pool
-	Cron  *cron.Cron
-	Queue *queue.Queue
+	DB      *pgxpool.Pool
+	Cron    *cron.Cron
+	Queue   *queue.Queue
+	OnEvent func(event, details string)
 }
 
 func New(db *pgxpool.Pool, q *queue.Queue) *Scheduler {
@@ -50,10 +52,9 @@ func (s *Scheduler) PruneOldData(ctx context.Context) {
 		slog.Info("pruned old contests", "count", res.RowsAffected())
 	}
 
-	if s.Queue != nil && s.Queue.Syncer != nil && s.Queue.Syncer.Valkey != nil {
+	if s.Queue != nil {
 		for _, platform := range extractor.Platforms {
-			cacheKey := models.ContestsCacheKey(platform)
-			if err := s.Queue.Syncer.Valkey.Del(ctx, cacheKey).Err(); err != nil {
+			if err := s.Queue.InvalidateContestsCache(ctx, platform); err != nil {
 				slog.Error("failed to invalidate contests cache on prune", "platform", platform, "error", err)
 			}
 		}
@@ -69,6 +70,9 @@ func (s *Scheduler) CleanupOAuthStates(ctx context.Context) {
 
 func (s *Scheduler) SyncAllUsers(ctx context.Context) {
 	slog.Info("queuing global sync for all users")
+	if s.OnEvent != nil {
+		s.OnEvent("CRON_SYNC_ALL_USERS", "Triggered global user synchronization sync task queuing.")
+	}
 	limit := 500
 	offset := 0
 	for {
@@ -77,7 +81,6 @@ func (s *Scheduler) SyncAllUsers(ctx context.Context) {
 			slog.Error("failed to fetch users for sync", "error", err)
 			return
 		}
-
 		count := 0
 		for rows.Next() {
 			count++
@@ -91,7 +94,6 @@ func (s *Scheduler) SyncAllUsers(ctx context.Context) {
 			}
 		}
 		rows.Close()
-
 		if count < limit {
 			break
 		}
@@ -100,11 +102,16 @@ func (s *Scheduler) SyncAllUsers(ctx context.Context) {
 }
 
 func (s *Scheduler) RunExtraction(ctx context.Context) {
+	var platforms []string
 	for name := range extractor.Fetchers {
+		platforms = append(platforms, name)
 		slog.Info("queuing extraction task", "platform", name)
 		if err := s.Queue.PublishExtractionTask(ctx, name); err != nil {
 			slog.Error("failed to queue extraction task", "platform", name, "error", err)
 		}
+	}
+	if s.OnEvent != nil {
+		s.OnEvent("CRON_CONTEST_EXTRACTION", fmt.Sprintf("Triggered contest extraction tasks queuing for: %s", strings.Join(platforms, ", ")))
 	}
 }
 

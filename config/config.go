@@ -29,6 +29,10 @@ type Config struct {
 	KafkaPartitions        int
 	KafkaReplicationFactor int
 	ValkeyURI              string
+	TelegramBotToken       string
+	TelegramGroupID        string
+	TelegramGroupTopicID   string
+	From                   string
 }
 
 func Load() *Config {
@@ -105,5 +109,9 @@ func Load() *Config {
 		KafkaPartitions:        kafkaPartitions,
 		KafkaReplicationFactor: kafkaRepFactor,
 		ValkeyURI:              os.Getenv("VALKEY_URI"),
+		TelegramBotToken:       os.Getenv("TG_BOT_TOKEN"),
+		TelegramGroupID:        os.Getenv("TG_GROUP_ID"),
+		TelegramGroupTopicID:   os.Getenv("TG_GROUP_TOPIC_ID"),
+		From:                   os.Getenv("FROM"),
 	}
 }
