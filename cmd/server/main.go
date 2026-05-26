@@ -144,13 +144,13 @@ func main() {
 	r.Use(api.RequestLoggerMiddleware)
 	r.Use(middleware.Recoverer)
 
-	r.Get("/health", adminHandlers.HealthCheck)
+	r.HandleFunc("/health", adminHandlers.HealthCheck)
 
 	r.Get("/auth/google", handlers.GoogleLogin)
 	r.Get("/auth/google/callback", handlers.GoogleCallback)
 
-	r.Get("/admin/update", adminHandlers.UpdateContests)
-	r.Get("/admin/sync", adminHandlers.SyncAll)
+	r.Post("/admin/update", adminHandlers.UpdateContests)
+	r.Post("/admin/sync", adminHandlers.SyncAll)
 
 	r.Group(func(r chi.Router) {
 		r.Use(api.RequireAuth(sessionStore))

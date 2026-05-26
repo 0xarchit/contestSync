@@ -97,8 +97,8 @@ func main() {
 		w.Write([]byte("<html><head><title>ContestSync Worker</title></head><body><h1>ContestSync Worker Active...</h1></body></html>"))
 	})
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		adminPass := r.Header.Get("X-Admin-Password")
-		if adminPass != "" {
+		if r.Method == http.MethodPost {
+			adminPass := r.Header.Get("X-Admin-Password")
 			if len(adminPass) > 256 {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)

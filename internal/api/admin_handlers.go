@@ -75,64 +75,64 @@ func measure(fn func() error) (float64, error) {
 }
 
 func (h *AdminHandlers) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
+	if r.Method == http.MethodPost {
+		if !h.requireAdmin(w, r) {
+			return
+		}
+		checkCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		services := make(map[string]componentStatus)
+		allHealthy := true
+		pgLatency, pgErr := measure(func() error {
+			return checkPostgres(checkCtx, h.DB)
+		})
+		if pgErr != nil {
+			services["postgres"] = componentStatus{Status: "unhealthy", LatencyMs: pgLatency, Error: pgErr.Error()}
+			allHealthy = false
+		} else {
+			services["postgres"] = componentStatus{Status: "healthy", LatencyMs: pgLatency}
+		}
+		if h.Valkey != nil {
+			vkLatency, vkErr := measure(func() error {
+				return checkValkey(checkCtx, h.Valkey)
+			})
+			if vkErr != nil {
+				services["valkey"] = componentStatus{Status: "unhealthy", LatencyMs: vkLatency, Error: vkErr.Error()}
+				allHealthy = false
+			} else {
+				services["valkey"] = componentStatus{Status: "healthy", LatencyMs: vkLatency}
+			}
+		} else {
+			services["valkey"] = componentStatus{Status: "not_configured", LatencyMs: 0}
+		}
+		if h.Queue != nil {
+			kafkaLatency, kafkaErr := measure(func() error {
+				return h.Queue.Health(checkCtx)
+			})
+			if kafkaErr != nil {
+				services["kafka"] = componentStatus{Status: "unhealthy", LatencyMs: kafkaLatency, Error: kafkaErr.Error()}
+				allHealthy = false
+			} else {
+				services["kafka"] = componentStatus{Status: "healthy", LatencyMs: kafkaLatency}
+			}
+		} else {
+			services["kafka"] = componentStatus{Status: "not_configured", LatencyMs: 0}
+		}
+		resp := healthResponse{Services: services}
+		w.Header().Set("Content-Type", "application/json")
+		if allHealthy {
+			resp.Status = "ok"
+			w.WriteHeader(http.StatusOK)
+		} else {
+			resp.Status = "degraded"
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+		json.NewEncoder(w).Encode(resp)
 		return
 	}
-
-	checkCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
-
-	services := make(map[string]componentStatus)
-	allHealthy := true
-
-	pgLatency, pgErr := measure(func() error {
-		return checkPostgres(checkCtx, h.DB)
-	})
-	if pgErr != nil {
-		services["postgres"] = componentStatus{Status: "unhealthy", LatencyMs: pgLatency, Error: pgErr.Error()}
-		allHealthy = false
-	} else {
-		services["postgres"] = componentStatus{Status: "healthy", LatencyMs: pgLatency}
-	}
-
-	if h.Valkey != nil {
-		vkLatency, vkErr := measure(func() error {
-			return checkValkey(checkCtx, h.Valkey)
-		})
-		if vkErr != nil {
-			services["valkey"] = componentStatus{Status: "unhealthy", LatencyMs: vkLatency, Error: vkErr.Error()}
-			allHealthy = false
-		} else {
-			services["valkey"] = componentStatus{Status: "healthy", LatencyMs: vkLatency}
-		}
-	} else {
-		services["valkey"] = componentStatus{Status: "not_configured", LatencyMs: 0}
-	}
-
-	if h.Queue != nil {
-		kafkaLatency, kafkaErr := measure(func() error {
-			return h.Queue.Health(checkCtx)
-		})
-		if kafkaErr != nil {
-			services["kafka"] = componentStatus{Status: "unhealthy", LatencyMs: kafkaLatency, Error: kafkaErr.Error()}
-			allHealthy = false
-		} else {
-			services["kafka"] = componentStatus{Status: "healthy", LatencyMs: kafkaLatency}
-		}
-	} else {
-		services["kafka"] = componentStatus{Status: "not_configured", LatencyMs: 0}
-	}
-
-	resp := healthResponse{Services: services}
 	w.Header().Set("Content-Type", "application/json")
-	if allHealthy {
-		resp.Status = "ok"
-		w.WriteHeader(http.StatusOK)
-	} else {
-		resp.Status = "degraded"
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}
-	json.NewEncoder(w).Encode(resp)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 }
 
 func checkPostgres(ctx context.Context, pool *pgxpool.Pool) error {
