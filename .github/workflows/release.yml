@@ -110,9 +110,21 @@ jobs:
     permissions:
       contents: read
       deployments: write
+    env:
+      HF_USERNAME: ${{ secrets.HF_USERNAME_SERVER || vars.HF_USERNAME_SERVER || secrets.HF_USERNAME || vars.HF_USERNAME }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN_SERVER || vars.HF_TOKEN_SERVER || secrets.HF_TOKEN || vars.HF_TOKEN }}
+      HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME_SERVER || vars.HF_SPACE_NAME_SERVER || secrets.HF_SPACE_NAME || vars.HF_SPACE_NAME }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Validate Deployment Context
+        run: |
+          set -e
+          if [ -z "$HF_USERNAME" ] || [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE_NAME" ]; then
+            echo "Error: Missing Hugging Face server deployment credentials!"
+            exit 1
+          fi
 
       - name: Create Server Deployment
         id: server_deploy
@@ -142,13 +154,14 @@ jobs:
       - name: Deploy Server to Hugging Face
         run: |
           set -e
-          echo "https://${{ secrets.HF_USERNAME_SERVER }}:${{ secrets.HF_TOKEN_SERVER }}@huggingface.co" > ~/.git-credentials
+          echo "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
           cd hf/server
+          sed -i "s/:latest/:${{ github.ref_name }}/g" Dockerfile
           git init
           git checkout -b main
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote add origin https://huggingface.co/spaces/${{ secrets.HF_SPACE_NAME_SERVER }}
+          git remote add origin https://huggingface.co/spaces/${HF_SPACE_NAME}
           git add .
           git commit -m "deploy: update hugging face server deployment to latest release"
           git push origin main --force
@@ -158,7 +171,7 @@ jobs:
           set -e
           SERVER_STATUS="pending"
           for i in {1..90}; do
-            RESPONSE_S=$(curl -s -H "Authorization: Bearer ${{ secrets.HF_TOKEN_SERVER }}" "https://huggingface.co/api/spaces/${{ secrets.HF_SPACE_NAME_SERVER }}")
+            RESPONSE_S=$(curl -s -H "Authorization: Bearer $HF_TOKEN" "https://huggingface.co/api/spaces/${HF_SPACE_NAME}")
             STAGE_S=$(echo "$RESPONSE_S" | jq -r '.runtime.stage')
             echo "Server Status (Attempt $i): $STAGE_S"
             if [ "$STAGE_S" = "RUNNING" ]; then
@@ -213,9 +226,21 @@ jobs:
     permissions:
       contents: read
       deployments: write
+    env:
+      HF_USERNAME: ${{ secrets.HF_USERNAME_WORKER || vars.HF_USERNAME_WORKER || secrets.HF_USERNAME || vars.HF_USERNAME }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN_WORKER || vars.HF_TOKEN_WORKER || secrets.HF_TOKEN || vars.HF_TOKEN }}
+      HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME_WORKER || vars.HF_SPACE_NAME_WORKER || secrets.HF_SPACE_NAME || vars.HF_SPACE_NAME }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Validate Deployment Context
+        run: |
+          set -e
+          if [ -z "$HF_USERNAME" ] || [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE_NAME" ]; then
+            echo "Error: Missing Hugging Face worker deployment credentials!"
+            exit 1
+          fi
 
       - name: Create Worker Deployment
         id: worker_deploy
@@ -245,39 +270,49 @@ jobs:
       - name: Deploy Workers to Hugging Face
         run: |
           set -e
-          echo "https://${{ secrets.HF_USERNAME_WORKER }}:${{ secrets.HF_TOKEN_WORKER }}@huggingface.co" > ~/.git-credentials
-          IFS=',' read -ra WORKER_SPACES <<< "${{ secrets.HF_SPACE_NAME_WORKER }}"
+          echo "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
+          cd hf/worker
+          cp Dockerfile Dockerfile.bak
+          IFS=',' read -ra WORKER_SPACES <<< "$HF_SPACE_NAME"
           for SPACE in "${WORKER_SPACES[@]}"; do
             CLEAN_SPACE=$(echo "$SPACE" | xargs)
-            echo "Pushing worker to Space: $CLEAN_SPACE"
-            cd $GITHUB_WORKSPACE/hf/worker
-            rm -rf .git
-            git init
-            git checkout -b main
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git remote add origin https://huggingface.co/spaces/$CLEAN_SPACE
-            git add .
-            git commit -m "deploy: update hugging face worker deployment to latest release"
-            git push origin main --force
+            if [ -n "$CLEAN_SPACE" ]; then
+              echo "Pushing worker to Space: $CLEAN_SPACE"
+              cd $GITHUB_WORKSPACE/hf/worker
+              rm -rf .git
+              cp Dockerfile.bak Dockerfile
+              sed -i "s/:latest/:${{ github.ref_name }}/g" Dockerfile
+              git init
+              git checkout -b main
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git remote add origin https://huggingface.co/spaces/$CLEAN_SPACE
+              git add .
+              git commit -m "deploy: update hugging face worker deployment to latest release"
+              git push origin main --force
+            fi
           done
+          cd $GITHUB_WORKSPACE/hf/worker
+          rm -f Dockerfile.bak
 
       - name: Poll Worker Build and Runtime Status
         run: |
           set -e
           WORKER_FINAL_STATUS="pending"
-          IFS=',' read -ra WORKER_SPACES <<< "${{ secrets.HF_SPACE_NAME_WORKER }}"
+          IFS=',' read -ra WORKER_SPACES <<< "$HF_SPACE_NAME"
           declare -A WORKER_STATUSES
           for SPACE in "${WORKER_SPACES[@]}"; do
             CLEAN_SPACE=$(echo "$SPACE" | xargs)
-            WORKER_STATUSES["$CLEAN_SPACE"]="pending"
+            if [ -n "$CLEAN_SPACE" ]; then
+              WORKER_STATUSES["$CLEAN_SPACE"]="pending"
+            fi
           done
           for i in {1..90}; do
             ALL_WORKERS_DONE=true
             ANY_WORKER_FAILED=false
             for SPACE in "${!WORKER_STATUSES[@]}"; do
               if [ "${WORKER_STATUSES[$SPACE]}" = "pending" ]; then
-                RESPONSE_W=$(curl -s -H "Authorization: Bearer ${{ secrets.HF_TOKEN_WORKER }}" "https://huggingface.co/api/spaces/$SPACE")
+                RESPONSE_W=$(curl -s -H "Authorization: Bearer $HF_TOKEN" "https://huggingface.co/api/spaces/$SPACE")
                 STAGE_W=$(echo "$RESPONSE_W" | jq -r '.runtime.stage')
                 echo "Worker $SPACE Status (Attempt $i): $STAGE_W"
                 if [ "$STAGE_W" = "RUNNING" ]; then
