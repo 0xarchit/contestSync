@@ -146,22 +146,16 @@ jobs:
           set -e
           sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Configure Secure Git Credentials
-        run: |
-          set -e
-          git config --global credential.helper store
-
       - name: Deploy Server to Hugging Face
         run: |
           set -e
-          echo "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
           cd hf/server
           sed -i "s/:latest/:${{ github.ref_name }}/g" Dockerfile
           git init
           git checkout -b main
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote add origin https://huggingface.co/spaces/${HF_SPACE_NAME}
+          git remote add origin https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_NAME}
           git add .
           git commit -m "deploy: update hugging face server deployment to latest release"
           git push origin main --force
@@ -262,15 +256,9 @@ jobs:
           set -e
           sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Configure Secure Git Credentials
-        run: |
-          set -e
-          git config --global credential.helper store
-
       - name: Deploy Workers to Hugging Face
         run: |
           set -e
-          echo "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
           cd hf/worker
           cp Dockerfile Dockerfile.bak
           IFS=',' read -ra WORKER_SPACES <<< "$HF_SPACE_NAME"
@@ -286,7 +274,7 @@ jobs:
               git checkout -b main
               git config user.name "github-actions[bot]"
               git config user.email "github-actions[bot]@users.noreply.github.com"
-              git remote add origin https://huggingface.co/spaces/$CLEAN_SPACE
+              git remote add origin https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/$CLEAN_SPACE
               git add .
               git commit -m "deploy: update hugging face worker deployment to latest release"
               git push origin main --force
