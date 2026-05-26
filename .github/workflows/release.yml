@@ -126,21 +126,6 @@ jobs:
             exit 1
           fi
 
-      - name: Create Server Deployment
-        id: server_deploy
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const result = await github.rest.repos.createDeployment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.ref,
-              environment: 'production-server',
-              description: 'Deploying ContestSync Server to Hugging Face Spaces',
-              required_contexts: []
-            });
-            core.setOutput('deployment_id', result.data.id);
-
       - name: Install jq
         run: |
           set -e
@@ -186,32 +171,6 @@ jobs:
             exit 1
           fi
 
-      - name: Update Server Status Success
-        if: success()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: ${{ steps.server_deploy.outputs.deployment_id }},
-              state: 'success',
-              environment: 'production-server'
-            });
-
-      - name: Update Server Status Failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: ${{ steps.server_deploy.outputs.deployment_id }},
-              state: 'failure',
-              environment: 'production-server'
-            });
-
   deploy-worker:
     name: Deploy Workers to Hugging Face Spaces
     needs: build-and-release
@@ -235,21 +194,6 @@ jobs:
             echo "Error: Missing Hugging Face worker deployment credentials!"
             exit 1
           fi
-
-      - name: Create Worker Deployment
-        id: worker_deploy
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const result = await github.rest.repos.createDeployment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.ref,
-              environment: 'production-worker',
-              description: 'Deploying ContestSync Workers to Hugging Face Spaces',
-              required_contexts: []
-            });
-            core.setOutput('deployment_id', result.data.id);
 
       - name: Install jq
         run: |
@@ -335,29 +279,3 @@ jobs:
             echo "Worker Deployment failed. Status: $WORKER_FINAL_STATUS"
             exit 1
           fi
-
-      - name: Update Worker Status Success
-        if: success()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: ${{ steps.worker_deploy.outputs.deployment_id }},
-              state: 'success',
-              environment: 'production-worker'
-            });
-
-      - name: Update Worker Status Failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: ${{ steps.worker_deploy.outputs.deployment_id }},
-              state: 'failure',
-              environment: 'production-worker'
-            });
