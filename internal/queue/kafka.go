@@ -128,9 +128,10 @@ func ensureTopics(cfg *config.Config, tlsConfig *tls.Config, broker string) erro
 
 	if len(toCreate) > 0 {
 		if err := conn.CreateTopics(toCreate...); err != nil {
-			return err
+			slog.Error("failed to create missing kafka topics", "error", err)
+		} else {
+			slog.Info("successfully created missing kafka topics")
 		}
-		slog.Info("successfully created missing kafka topics")
 	}
 	return nil
 }
