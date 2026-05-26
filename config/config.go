@@ -29,7 +29,8 @@ type Config struct {
 	KafkaPartitions        int
 	KafkaReplicationFactor int
 	ValkeyURI              string
-	TelegramBotToken       string
+	TelegramProxyURL       string
+	ProxySecretKey         string
 	TelegramGroupID        string
 	TelegramGroupTopicID   string
 	From                   string
@@ -87,6 +88,11 @@ func Load() *Config {
 		env = "development"
 	}
 
+	secretKey := os.Getenv("PROXY_SECRET_KEY")
+	if secretKey == "" {
+		secretKey = os.Getenv("ProxySecretKey")
+	}
+
 	return &Config{
 		DatabaseURL:            os.Getenv("POSTGRES_DB"),
 		CACertificate:          caCert,
@@ -109,7 +115,8 @@ func Load() *Config {
 		KafkaPartitions:        kafkaPartitions,
 		KafkaReplicationFactor: kafkaRepFactor,
 		ValkeyURI:              os.Getenv("VALKEY_URI"),
-		TelegramBotToken:       os.Getenv("TG_BOT_TOKEN"),
+		TelegramProxyURL:       os.Getenv("TG_PROXY_URL"),
+		ProxySecretKey:         secretKey,
 		TelegramGroupID:        os.Getenv("TG_GROUP_ID"),
 		TelegramGroupTopicID:   os.Getenv("TG_GROUP_TOPIC_ID"),
 		From:                   os.Getenv("FROM"),

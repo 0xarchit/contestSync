@@ -51,7 +51,7 @@ func main() {
 	slog.SetDefault(slog.New(handler))
 
 	var tgManager *observability.Manager
-	tgManager, handler = observability.Init(cfg.TelegramBotToken, cfg.TelegramGroupID, cfg.TelegramGroupTopicID, cfg.From, handler)
+	tgManager, handler = observability.Init(cfg.TelegramProxyURL, cfg.ProxySecretKey, cfg.TelegramGroupID, cfg.TelegramGroupTopicID, cfg.From, handler)
 	slog.SetDefault(slog.New(handler))
 	if tgManager != nil {
 		defer tgManager.Drain()

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,10 +14,11 @@ import (
 )
 
 type TelegramConfig struct {
-	BotToken string
-	GroupID  string
-	TopicID  string
-	From     string
+	ProxyURL  string
+	SecretKey string
+	GroupID   string
+	TopicID   string
+	From      string
 }
 
 type TelegramClient struct {
@@ -107,16 +107,11 @@ func (c *TelegramClient) Send(ctx context.Context, message string) error {
 }
 
 func (c *TelegramClient) sendChunk(ctx context.Context, chunk string) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", c.cfg.BotToken)
+	url := c.cfg.ProxyURL
 	payload := map[string]any{
-		"chat_id":    c.cfg.GroupID,
-		"text":       chunk,
-		"parse_mode": "HTML",
-	}
-	if c.cfg.TopicID != "" {
-		if threadID, err := strconv.Atoi(c.cfg.TopicID); err == nil {
-			payload["message_thread_id"] = threadID
-		}
+		"group_id": c.cfg.GroupID,
+		"topic_id": c.cfg.TopicID,
+		"text":     chunk,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -130,6 +125,7 @@ func (c *TelegramClient) sendChunk(ctx context.Context, chunk string) error {
 			return err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+c.cfg.SecretKey)
 		resp, err := c.client.Do(req)
 		if err == nil {
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -150,7 +146,7 @@ func (c *TelegramClient) sendChunk(ctx context.Context, chunk string) error {
 				}
 			}
 			resp.Body.Close()
-			lastErr = fmt.Errorf("telegram api error: status %d", resp.StatusCode)
+			lastErr = fmt.Errorf("telegram proxy error: status %d", resp.StatusCode)
 		} else {
 			lastErr = err
 		}
@@ -308,13 +304,14 @@ func (m *Manager) Drain() {
 	<-m.done
 }
 
-func Init(botToken, groupID, topicID, from string, handler slog.Handler) (*Manager, slog.Handler) {
-	if botToken != "" && groupID != "" {
+func Init(proxyURL, secretKey, groupID, topicID, from string, handler slog.Handler) (*Manager, slog.Handler) {
+	if proxyURL != "" && groupID != "" {
 		tgClient := NewClient(TelegramConfig{
-			BotToken: botToken,
-			GroupID:  groupID,
-			TopicID:  topicID,
-			From:     from,
+			ProxyURL:  proxyURL,
+			SecretKey: secretKey,
+			GroupID:   groupID,
+			TopicID:   topicID,
+			From:      from,
 		})
 		tgManager := NewManager(tgClient)
 		tgManager.Start()

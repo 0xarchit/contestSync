@@ -10,17 +10,22 @@ import (
 
 func TestIntegrationTelegramSend(t *testing.T) {
 	godotenv.Load("../../.env")
-	botToken := os.Getenv("TG_BOT_TOKEN")
+	proxyURL := os.Getenv("TG_PROXY_URL")
+	secretKey := os.Getenv("PROXY_SECRET_KEY")
+	if secretKey == "" {
+		secretKey = os.Getenv("ProxySecretKey")
+	}
 	groupID := os.Getenv("TG_GROUP_ID")
 	topicID := os.Getenv("TG_GROUP_TOPIC_ID")
-	if botToken == "" || groupID == "" {
-		t.Skip("skipping integration test; TG_BOT_TOKEN and TG_GROUP_ID not set in env")
+	if proxyURL == "" || groupID == "" {
+		t.Skip("skipping integration test; TG_PROXY_URL and TG_GROUP_ID not set in env")
 	}
 	cfg := TelegramConfig{
-		BotToken: botToken,
-		GroupID:  groupID,
-		TopicID:  topicID,
-		From:     "Go Integration Test Suite",
+		ProxyURL:  proxyURL,
+		SecretKey: secretKey,
+		GroupID:   groupID,
+		TopicID:   topicID,
+		From:      "Go Integration Test Suite",
 	}
 	client := NewClient(cfg)
 	ctx := context.Background()
