@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,8 +22,11 @@ type TelegramConfig struct {
 }
 
 type TelegramClient struct {
-	cfg    TelegramConfig
-	client *http.Client
+	cfg           TelegramConfig
+	client        *http.Client
+	failures      int32
+	coolDownUntil time.Time
+	mu            sync.RWMutex
 }
 
 func NewClient(cfg TelegramConfig) *TelegramClient {
@@ -56,7 +61,39 @@ func SplitMessage(text string, limit int) []string {
 	return chunks
 }
 
+type telegramErrorResponse struct {
+	Ok          bool   `json:"ok"`
+	ErrorCode   int    `json:"error_code"`
+	Description string `json:"description"`
+	Parameters  struct {
+		RetryAfter int `json:"retry_after"`
+	} `json:"parameters"`
+}
+
+func (c *TelegramClient) IsCoolingDown() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return time.Now().Before(c.coolDownUntil)
+}
+
+func (c *TelegramClient) recordFailure() {
+	val := atomic.AddInt32(&c.failures, 1)
+	if val >= 3 {
+		c.mu.Lock()
+		c.coolDownUntil = time.Now().Add(5 * time.Minute)
+		c.mu.Unlock()
+		slog.Error("telegram client entering 5-minute cooldown due to consecutive failures")
+	}
+}
+
+func (c *TelegramClient) recordSuccess() {
+	atomic.StoreInt32(&c.failures, 0)
+}
+
 func (c *TelegramClient) Send(ctx context.Context, message string) error {
+	if c.IsCoolingDown() {
+		return fmt.Errorf("telegram client is in cooldown mode due to consecutive failures")
+	}
 	if c.cfg.From != "" {
 		message = fmt.Sprintf("<b>[Instance: %s]</b>\n%s", EscapeHTML(c.cfg.From), message)
 	}
@@ -97,7 +134,20 @@ func (c *TelegramClient) sendChunk(ctx context.Context, chunk string) error {
 		if err == nil {
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 				resp.Body.Close()
+				c.recordSuccess()
 				return nil
+			}
+			var errResp telegramErrorResponse
+			if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Parameters.RetryAfter > 0 {
+				resp.Body.Close()
+				retryDelay := time.Duration(errResp.Parameters.RetryAfter) * time.Second
+				slog.Warn("telegram api rate limited, waiting to retry", "retry_after_seconds", errResp.Parameters.RetryAfter)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(retryDelay):
+					continue
+				}
 			}
 			resp.Body.Close()
 			lastErr = fmt.Errorf("telegram api error: status %d", resp.StatusCode)
@@ -111,6 +161,7 @@ func (c *TelegramClient) sendChunk(ctx context.Context, chunk string) error {
 			delay *= 2
 		}
 	}
+	c.recordFailure()
 	return lastErr
 }
 
