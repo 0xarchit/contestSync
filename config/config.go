@@ -48,7 +48,7 @@ func Load() *Config {
 
 	kafkaPartitions, err := strconv.Atoi(os.Getenv("KAFKA_PARTITIONS"))
 	if err != nil || kafkaPartitions <= 0 {
-		kafkaPartitions = 4
+		kafkaPartitions = 2
 	}
 
 	kafkaRepFactor, err := strconv.Atoi(os.Getenv("KAFKA_REPLICATION_FACTOR"))
