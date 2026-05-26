@@ -101,3 +101,173 @@ jobs:
             worker.exe
             server
             worker
+
+  deploy:
+    name: Deploy to Hugging Face Spaces
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Create Server Deployment
+        id: server_deploy
+        uses: chrby/github-deployment-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: production-server
+          description: Deploying ContestSync Server to Hugging Face Spaces
+
+      - name: Create Worker Deployment
+        id: worker_deploy
+        uses: chrby/github-deployment-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: production-worker
+          description: Deploying ContestSync Workers to Hugging Face Spaces
+
+      - name: Install jq
+        run: |
+          set -e
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Configure Secure Git Credentials
+        run: |
+          set -e
+          git config --global credential.helper store
+
+      - name: Deploy Server to Hugging Face
+        run: |
+          set -e
+          echo "https://${{ secrets.HF_USERNAME_SERVER }}:${{ secrets.HF_TOKEN_SERVER }}@huggingface.co" > ~/.git-credentials
+          cd hf/server
+          git init
+          git checkout -b main
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add origin https://huggingface.co/spaces/${{ secrets.HF_SPACE_NAME_SERVER }}
+          git add .
+          git commit -m "deploy: update hugging face server deployment to latest release"
+          git push origin main --force
+
+      - name: Deploy Workers to Hugging Face
+        run: |
+          set -e
+          echo "https://${{ secrets.HF_USERNAME_WORKER }}:${{ secrets.HF_TOKEN_WORKER }}@huggingface.co" > ~/.git-credentials
+          IFS=',' read -ra WORKER_SPACES <<< "${{ secrets.HF_SPACE_NAME_WORKER }}"
+          for SPACE in "${WORKER_SPACES[@]}"; do
+            CLEAN_SPACE=$(echo "$SPACE" | xargs)
+            echo "Pushing worker to Space: $CLEAN_SPACE"
+            cd $GITHUB_WORKSPACE/hf/worker
+            rm -rf .git
+            git init
+            git checkout -b main
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git remote add origin https://huggingface.co/spaces/$CLEAN_SPACE
+            git add .
+            git commit -m "deploy: update hugging face worker deployment to latest release"
+            git push origin main --force
+          done
+
+      - name: Poll Server and Worker Build and Runtime Status
+        run: |
+          set -e
+          SERVER_STATUS="pending"
+          WORKER_FINAL_STATUS="pending"
+          IFS=',' read -ra WORKER_SPACES <<< "${{ secrets.HF_SPACE_NAME_WORKER }}"
+          declare -A WORKER_STATUSES
+          for SPACE in "${WORKER_SPACES[@]}"; do
+            CLEAN_SPACE=$(echo "$SPACE" | xargs)
+            WORKER_STATUSES["$CLEAN_SPACE"]="pending"
+          done
+          for i in {1..90}; do
+            if [ "$SERVER_STATUS" = "pending" ]; then
+              RESPONSE_S=$(curl -s -H "Authorization: Bearer ${{ secrets.HF_TOKEN_SERVER }}" "https://huggingface.co/api/spaces/${{ secrets.HF_SPACE_NAME_SERVER }}")
+              STAGE_S=$(echo "$RESPONSE_S" | jq -r '.runtime.stage')
+              echo "Server Status (Attempt $i): $STAGE_S"
+              if [ "$STAGE_S" = "RUNNING" ]; then
+                SERVER_STATUS="success"
+              elif [ "$STAGE_S" = "PAUSED" ]; then
+                echo "Server Space paused due to inactivity"
+                SERVER_STATUS="failure"
+                break
+              elif [ "$STAGE_S" = "CRASHED" ] || [ "$STAGE_S" = "ERROR" ] || [ "$STAGE_S" = "BUILD_ERROR" ]; then
+                SERVER_STATUS="failure"
+              fi
+            fi
+            ALL_WORKERS_DONE=true
+            ANY_WORKER_FAILED=false
+            for SPACE in "${!WORKER_STATUSES[@]}"; do
+              if [ "${WORKER_STATUSES[$SPACE]}" = "pending" ]; then
+                RESPONSE_W=$(curl -s -H "Authorization: Bearer ${{ secrets.HF_TOKEN_WORKER }}" "https://huggingface.co/api/spaces/$SPACE")
+                STAGE_W=$(echo "$RESPONSE_W" | jq -r '.runtime.stage')
+                echo "Worker $SPACE Status (Attempt $i): $STAGE_W"
+                if [ "$STAGE_W" = "RUNNING" ]; then
+                  WORKER_STATUSES["$SPACE"]="success"
+                elif [ "$STAGE_W" = "PAUSED" ]; then
+                  echo "Worker Space $SPACE paused due to inactivity"
+                  WORKER_STATUSES["$SPACE"]="failure"
+                  ANY_WORKER_FAILED=true
+                elif [ "$STAGE_W" = "CRASHED" ] || [ "$STAGE_W" = "ERROR" ] || [ "$STAGE_W" = "BUILD_ERROR" ]; then
+                  WORKER_STATUSES["$SPACE"]="failure"
+                  ANY_WORKER_FAILED=true
+                else
+                  ALL_WORKERS_DONE=false
+                fi
+              fi
+            done
+            if [ "$ANY_WORKER_FAILED" = "true" ]; then
+              WORKER_FINAL_STATUS="failure"
+              break
+            fi
+            if [ "$ALL_WORKERS_DONE" = "true" ]; then
+              WORKER_FINAL_STATUS="success"
+            else
+              WORKER_FINAL_STATUS="pending"
+            fi
+            if [ "$SERVER_STATUS" != "pending" ] && [ "$WORKER_FINAL_STATUS" != "pending" ]; then
+              break
+            fi
+            sleep 10
+          done
+          if [ "$SERVER_STATUS" != "success" ] || [ "$WORKER_FINAL_STATUS" != "success" ]; then
+            echo "Deployment failed. Server Status: $SERVER_STATUS, Workers Status: $WORKER_FINAL_STATUS"
+            exit 1
+          fi
+
+      - name: Update Server Status Success
+        if: success()
+        uses: chrby/github-deployment-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: production-server
+          deployment_id: ${{ steps.server_deploy.outputs.deployment_id }}
+          status: success
+
+      - name: Update Worker Status Success
+        if: success()
+        uses: chrby/github-deployment-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: production-worker
+          deployment_id: ${{ steps.worker_deploy.outputs.deployment_id }}
+          status: success
+
+      - name: Update Server Status Failure
+        if: failure()
+        uses: chrby/github-deployment-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: production-server
+          deployment_id: ${{ steps.server_deploy.outputs.deployment_id }}
+          status: failure
+
+      - name: Update Worker Status Failure
+        if: failure()
+        uses: chrby/github-deployment-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: production-worker
+          deployment_id: ${{ steps.worker_deploy.outputs.deployment_id }}
+          status: failure
