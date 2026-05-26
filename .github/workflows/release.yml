@@ -106,25 +106,42 @@ jobs:
     name: Deploy to Hugging Face Spaces
     needs: build-and-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Create Server Deployment
         id: server_deploy
-        uses: chrby/github-deployment-action@v2
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          environment: production-server
-          description: Deploying ContestSync Server to Hugging Face Spaces
+          script: |
+            const result = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref,
+              environment: 'production-server',
+              description: 'Deploying ContestSync Server to Hugging Face Spaces',
+              required_contexts: []
+            });
+            core.setOutput('deployment_id', result.data.id);
 
       - name: Create Worker Deployment
         id: worker_deploy
-        uses: chrby/github-deployment-action@v2
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          environment: production-worker
-          description: Deploying ContestSync Workers to Hugging Face Spaces
+          script: |
+            const result = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref,
+              environment: 'production-worker',
+              description: 'Deploying ContestSync Workers to Hugging Face Spaces',
+              required_contexts: []
+            });
+            core.setOutput('deployment_id', result.data.id);
 
       - name: Install jq
         run: |
@@ -238,36 +255,52 @@ jobs:
 
       - name: Update Server Status Success
         if: success()
-        uses: chrby/github-deployment-action@v2
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          environment: production-server
-          deployment_id: ${{ steps.server_deploy.outputs.deployment_id }}
-          status: success
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.server_deploy.outputs.deployment_id }},
+              state: 'success',
+              environment: 'production-server'
+            });
 
       - name: Update Worker Status Success
         if: success()
-        uses: chrby/github-deployment-action@v2
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          environment: production-worker
-          deployment_id: ${{ steps.worker_deploy.outputs.deployment_id }}
-          status: success
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.worker_deploy.outputs.deployment_id }},
+              state: 'success',
+              environment: 'production-worker'
+            });
 
       - name: Update Server Status Failure
         if: failure()
-        uses: chrby/github-deployment-action@v2
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          environment: production-server
-          deployment_id: ${{ steps.server_deploy.outputs.deployment_id }}
-          status: failure
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.server_deploy.outputs.deployment_id }},
+              state: 'failure',
+              environment: 'production-server'
+            });
 
       - name: Update Worker Status Failure
         if: failure()
-        uses: chrby/github-deployment-action@v2
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          environment: production-worker
-          deployment_id: ${{ steps.worker_deploy.outputs.deployment_id }}
-          status: failure
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.worker_deploy.outputs.deployment_id }},
+              state: 'failure',
+              environment: 'production-worker'
+            });
