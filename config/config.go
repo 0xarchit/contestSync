@@ -8,23 +8,23 @@ import (
 )
 
 type Config struct {
-	DatabaseURL        string
-	CACertificate      []byte
-	ConnectionLimit    int
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURL  string
-	SessionSecret      []byte
-	EncryptionKey      []byte
-	Port               string
-	WorkerPort         string
-	Env                string
-	AllowedOrigin      string
-	AdminPassword      string
-	KafkaHost          string
-	KafkaPort          string
-	KafkaAccessKey     []byte
-	KafkaAccessCert    []byte
+	DatabaseURL            string
+	CACertificate          []byte
+	ConnectionLimit        int
+	GoogleClientID         string
+	GoogleClientSecret     string
+	GoogleRedirectURL      string
+	SessionSecret          []byte
+	EncryptionKey          []byte
+	Port                   string
+	WorkerPort             string
+	Env                    string
+	AllowedOrigin          string
+	AdminPassword          string
+	KafkaHost              string
+	KafkaPort              string
+	KafkaAccessKey         []byte
+	KafkaAccessCert        []byte
 	KafkaCACert            []byte
 	KafkaPartitions        int
 	KafkaReplicationFactor int
@@ -72,6 +72,9 @@ func Load() *Config {
 
 	workerPort := os.Getenv("WORKER_PORT")
 	if workerPort == "" {
+		workerPort = os.Getenv("PORT")
+	}
+	if workerPort == "" {
 		workerPort = "8081"
 	}
 
@@ -81,23 +84,23 @@ func Load() *Config {
 	}
 
 	return &Config{
-		DatabaseURL:        os.Getenv("POSTGRES_DB"),
-		CACertificate:      caCert,
-		ConnectionLimit:    connLimit,
-		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		GoogleRedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
-		SessionSecret:      sessionSecret,
-		EncryptionKey:      encryptionKey,
-		Port:               port,
-		WorkerPort:         workerPort,
-		Env:                env,
-		AllowedOrigin:      os.Getenv("ALLOWED_ORIGIN"),
-		AdminPassword:      os.Getenv("ADMIN_PASSWORD"),
-		KafkaHost:          os.Getenv("KAFKA_HOST"),
-		KafkaPort:          os.Getenv("KAFKA_PORT"),
-		KafkaAccessKey:     kafkaAccessKey,
-		KafkaAccessCert:    kafkaAccessCert,
+		DatabaseURL:            os.Getenv("POSTGRES_DB"),
+		CACertificate:          caCert,
+		ConnectionLimit:        connLimit,
+		GoogleClientID:         os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret:     os.Getenv("GOOGLE_CLIENT_SECRET"),
+		GoogleRedirectURL:      os.Getenv("GOOGLE_REDIRECT_URL"),
+		SessionSecret:          sessionSecret,
+		EncryptionKey:          encryptionKey,
+		Port:                   port,
+		WorkerPort:             workerPort,
+		Env:                    env,
+		AllowedOrigin:          os.Getenv("ALLOWED_ORIGIN"),
+		AdminPassword:          os.Getenv("ADMIN_PASSWORD"),
+		KafkaHost:              os.Getenv("KAFKA_HOST"),
+		KafkaPort:              os.Getenv("KAFKA_PORT"),
+		KafkaAccessKey:         kafkaAccessKey,
+		KafkaAccessCert:        kafkaAccessCert,
 		KafkaCACert:            kafkaCACert,
 		KafkaPartitions:        kafkaPartitions,
 		KafkaReplicationFactor: kafkaRepFactor,

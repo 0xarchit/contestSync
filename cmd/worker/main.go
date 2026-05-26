@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -95,6 +97,80 @@ func main() {
 		w.Write([]byte("<html><head><title>ContestSync Worker</title></head><body><h1>ContestSync Worker Active...</h1></body></html>"))
 	})
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		adminPass := r.Header.Get("X-Admin-Password")
+		if adminPass != "" {
+			if len(adminPass) > 256 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+				return
+			}
+			if cfg.AdminPassword == "" || subtle.ConstantTimeCompare([]byte(adminPass), []byte(cfg.AdminPassword)) != 1 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+				return
+			}
+			checkCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			defer cancel()
+			services := make(map[string]map[string]any)
+			allHealthy := true
+			pgStart := time.Now()
+			var pgErr error
+			if pool != nil {
+				tx, err := pool.Begin(checkCtx)
+				if err == nil {
+					tx.Rollback(checkCtx)
+				} else {
+					pgErr = err
+				}
+			} else {
+				pgErr = fmt.Errorf("database pool not initialized")
+			}
+			pgLatency := float64(time.Since(pgStart).Microseconds()) / 1000.0
+			if pgErr != nil {
+				services["postgres"] = map[string]any{"status": "unhealthy", "latency_ms": pgLatency, "error": pgErr.Error()}
+				allHealthy = false
+			} else {
+				services["postgres"] = map[string]any{"status": "healthy", "latency_ms": pgLatency}
+			}
+			if valkeyClient != nil {
+				vkStart := time.Now()
+				vkErr := valkeyClient.Ping(checkCtx).Err()
+				vkLatency := float64(time.Since(vkStart).Microseconds()) / 1000.0
+				if vkErr != nil {
+					services["valkey"] = map[string]any{"status": "unhealthy", "latency_ms": vkLatency, "error": vkErr.Error()}
+					allHealthy = false
+				} else {
+					services["valkey"] = map[string]any{"status": "healthy", "latency_ms": vkLatency}
+				}
+			} else {
+				services["valkey"] = map[string]any{"status": "not_configured", "latency_ms": 0.0}
+			}
+			if q != nil {
+				qStart := time.Now()
+				qErr := q.Health(checkCtx)
+				qLatency := float64(time.Since(qStart).Microseconds()) / 1000.0
+				if qErr != nil {
+					services["kafka"] = map[string]any{"status": "unhealthy", "latency_ms": qLatency, "error": qErr.Error()}
+					allHealthy = false
+				} else {
+					services["kafka"] = map[string]any{"status": "healthy", "latency_ms": qLatency}
+				}
+			} else {
+				services["kafka"] = map[string]any{"status": "not_configured", "latency_ms": 0.0}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			status := "ok"
+			if !allHealthy {
+				status = "degraded"
+				w.WriteHeader(http.StatusServiceUnavailable)
+			} else {
+				w.WriteHeader(http.StatusOK)
+			}
+			json.NewEncoder(w).Encode(map[string]any{"status": status, "services": services})
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
