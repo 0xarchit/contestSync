@@ -16,6 +16,7 @@ import (
 	"github.com/0xarchit/contestsync/config"
 	"github.com/0xarchit/contestsync/internal/auth"
 	"github.com/0xarchit/contestsync/internal/db"
+	"github.com/0xarchit/contestsync/internal/observability"
 	"github.com/0xarchit/contestsync/internal/queue"
 	"github.com/0xarchit/contestsync/internal/sync"
 	"github.com/joho/godotenv"
@@ -44,6 +45,13 @@ func main() {
 		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})
 	}
 	slog.SetDefault(slog.New(handler))
+
+	var tgManager *observability.Manager
+	tgManager, handler = observability.Init(cfg.TelegramBotToken, cfg.TelegramGroupID, cfg.TelegramGroupTopicID, cfg.From, handler)
+	slog.SetDefault(slog.New(handler))
+	if tgManager != nil {
+		defer tgManager.Drain()
+	}
 
 	if len(cfg.EncryptionKey) != 32 {
 		log.Fatal("ENCRYPTION_KEY must be exactly 32 bytes")
@@ -183,6 +191,9 @@ func main() {
 
 	go func() {
 		slog.Info("worker starting", "port", cfg.WorkerPort)
+		if tgManager != nil {
+			tgManager.TriggerSystemEvent("STARTUP", "Worker starting on port "+cfg.WorkerPort)
+		}
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("failed to start worker: %v", err)
 		}
@@ -190,6 +201,9 @@ func main() {
 
 	<-shutdownCtx.Done()
 	slog.Info("shutting down worker gracefully")
+	if tgManager != nil {
+		tgManager.TriggerSystemEvent("SHUTDOWN", "Worker is shutting down gracefully")
+	}
 
 	shutdownTimeoutCtx, cancelTimeout := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelTimeout()

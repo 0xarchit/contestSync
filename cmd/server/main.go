@@ -15,6 +15,7 @@ import (
 	"github.com/0xarchit/contestsync/internal/api"
 	"github.com/0xarchit/contestsync/internal/auth"
 	"github.com/0xarchit/contestsync/internal/db"
+	"github.com/0xarchit/contestsync/internal/observability"
 	"github.com/0xarchit/contestsync/internal/queue"
 	"github.com/0xarchit/contestsync/internal/scheduler"
 	"github.com/0xarchit/contestsync/internal/sync"
@@ -48,6 +49,13 @@ func main() {
 		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})
 	}
 	slog.SetDefault(slog.New(handler))
+
+	var tgManager *observability.Manager
+	tgManager, handler = observability.Init(cfg.TelegramBotToken, cfg.TelegramGroupID, cfg.TelegramGroupTopicID, cfg.From, handler)
+	slog.SetDefault(slog.New(handler))
+	if tgManager != nil {
+		defer tgManager.Drain()
+	}
 
 	if len(cfg.EncryptionKey) != 32 {
 		log.Fatal("ENCRYPTION_KEY must be exactly 32 bytes")
@@ -124,6 +132,9 @@ func main() {
 	}
 
 	sched := scheduler.New(pool, q)
+	if tgManager != nil {
+		sched.OnEvent = tgManager.TriggerSystemEvent
+	}
 	sched.Start()
 	defer sched.Stop()
 
@@ -182,6 +193,9 @@ func main() {
 
 	go func() {
 		slog.Info("server starting", "port", cfg.Port)
+		if tgManager != nil {
+			tgManager.TriggerSystemEvent("STARTUP", "Server starting on port "+cfg.Port)
+		}
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("failed to start server: %v", err)
 		}
@@ -189,6 +203,9 @@ func main() {
 
 	<-shutdownCtx.Done()
 	slog.Info("shutting down server gracefully")
+	if tgManager != nil {
+		tgManager.TriggerSystemEvent("SHUTDOWN", "Server is shutting down gracefully")
+	}
 
 	shutdownTimeoutCtx, cancelTimeout := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelTimeout()
