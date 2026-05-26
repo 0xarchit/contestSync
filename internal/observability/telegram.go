@@ -32,7 +32,7 @@ type TelegramClient struct {
 func NewClient(cfg TelegramConfig) *TelegramClient {
 	return &TelegramClient{
 		cfg:    cfg,
-		client: &http.Client{Timeout: 10 * time.Second},
+		client: &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -189,6 +189,10 @@ func (h *TelegramHandler) Handle(ctx context.Context, r slog.Record) error {
 		return err
 	}
 	if r.Level >= slog.LevelWarn && h.queue != nil {
+		msgLower := strings.ToLower(r.Message)
+		if strings.Contains(msgLower, "telegram") || strings.Contains(msgLower, "dropped system event") {
+			return nil
+		}
 		var buf bytes.Buffer
 		buf.WriteString(fmt.Sprintf("<b>[%s]</b> %s\n\n", r.Level.String(), EscapeHTML(r.Message)))
 		r.Attrs(func(a slog.Attr) bool {
@@ -250,17 +254,28 @@ func (m *Manager) Start() {
 				slog.Error("telegram manager goroutine panicked", "panic", r)
 			}
 		}()
+		select {
+		case <-m.ctx.Done():
+			return
+		case <-time.After(30 * time.Second):
+		}
 		for {
 			select {
 			case msg, ok := <-m.queue:
 				if !ok {
 					return
 				}
-				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-				if err := m.client.Send(ctx, msg); err != nil {
-					slog.Error("failed to send telegram notification", "error", err)
-				}
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				err := m.client.Send(ctx, msg)
 				cancel()
+				if err != nil {
+					slog.Error("failed to send telegram notification", "error", err)
+					select {
+					case <-m.ctx.Done():
+						return
+					case <-time.After(60 * time.Second):
+					}
+				}
 			case <-m.ctx.Done():
 				for {
 					select {
