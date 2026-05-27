@@ -68,7 +68,7 @@ func main() {
 	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 
-	pool, err := db.Init(shutdownCtx, cfg.DatabaseURL, cfg.CACertificate, cfg.ConnectionLimit)
+	pool, err := db.Init(shutdownCtx, cfg.DatabaseURL, cfg.ReadDatabaseURLs, cfg.ConnectionLimit, cfg.ConnectionPoolLimit)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -108,13 +108,14 @@ func main() {
 	authProvider := auth.NewProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
 
 	syncer := &sync.Syncer{
-		DB:            pool,
+		DB:            pool.WriteDB(),
+		ReadDB:        pool.ReadDB(),
 		AuthProvider:  authProvider,
 		SessionSecret: cfg.EncryptionKey,
 		Valkey:        valkeyClient,
 	}
 
-	q, err := queue.New(cfg, pool, syncer)
+	q, err := queue.New(cfg, pool.WriteDB(), syncer)
 	if err != nil {
 		log.Fatalf("failed to initialize kafka queue: %v", err)
 	}
@@ -122,7 +123,8 @@ func main() {
 	q.StartConsumers(shutdownCtx, cfg)
 
 	handlers := &api.Handlers{
-		DB:            pool,
+		DB:            pool.WriteDB(),
+		ReadDB:        pool.ReadDB(),
 		SessionStore:  sessionStore,
 		AuthProvider:  authProvider,
 		SessionSecret: cfg.EncryptionKey,
@@ -131,7 +133,7 @@ func main() {
 		Env:           cfg.Env,
 	}
 
-	sched := scheduler.New(pool, q)
+	sched := scheduler.New(pool.ReadDB(), pool.WriteDB(), q)
 	if tgManager != nil {
 		sched.OnEvent = tgManager.TriggerSystemEvent
 	}
@@ -141,7 +143,8 @@ func main() {
 	adminHandlers := &api.AdminHandlers{
 		Scheduler:     sched,
 		AdminPassword: cfg.AdminPassword,
-		DB:            pool,
+		DB:            pool.WriteDB(),
+		ReadDB:        pool.ReadDB(),
 		Valkey:        valkeyClient,
 		Queue:         q,
 	}

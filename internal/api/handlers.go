@@ -23,6 +23,7 @@ import (
 
 type Handlers struct {
 	DB            *pgxpool.Pool
+	ReadDB        *pgxpool.Pool
 	SessionStore  sessions.Store
 	AuthProvider  *auth.Provider
 	SessionSecret []byte
@@ -208,9 +209,13 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !cacheFound {
+		readPool := h.ReadDB
+		if readPool == nil {
+			readPool = h.DB
+		}
 		var calendarID sql.NullString
 		var encryptedRefreshToken string
-		err := h.DB.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, refresh_token FROM users WHERE id = $1", userID).Scan(
+		err := readPool.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, refresh_token FROM users WHERE id = $1", userID).Scan(
 			&cachedUser.ID, &cachedUser.GoogleID, &cachedUser.Email, &calendarID, &cachedUser.UseDedicated, &cachedUser.Platforms, &encryptedRefreshToken,
 		)
 		if err != nil {
@@ -302,7 +307,33 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) GetPlatforms(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string][]string{"platforms": extractor.Platforms})
+
+	cacheKey := models.PlatformsCacheKey()
+	if h.Valkey != nil {
+		val, err := h.Valkey.Get(r.Context(), cacheKey).Result()
+		if err == nil {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(val))
+			return
+		}
+	}
+
+	payload := map[string][]string{"platforms": extractor.Platforms}
+	serialized, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("failed to marshal platforms payload", "error", err)
+		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if h.Valkey != nil {
+		if err := h.Valkey.Set(r.Context(), cacheKey, string(serialized), models.PlatformsCacheTTL).Err(); err != nil {
+			slog.Error("failed to write platforms cache", "error", err)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(serialized)
 }
 
 func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {

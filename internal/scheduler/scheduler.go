@@ -13,17 +13,19 @@ import (
 )
 
 type Scheduler struct {
-	DB      *pgxpool.Pool
+	ReadDB  *pgxpool.Pool
+	WriteDB *pgxpool.Pool
 	Cron    *cron.Cron
 	Queue   *queue.Queue
 	OnEvent func(event, details string)
 }
 
-func New(db *pgxpool.Pool, q *queue.Queue) *Scheduler {
+func New(readDB *pgxpool.Pool, writeDB *pgxpool.Pool, q *queue.Queue) *Scheduler {
 	return &Scheduler{
-		DB:    db,
-		Cron:  cron.New(),
-		Queue: q,
+		ReadDB:  readDB,
+		WriteDB: writeDB,
+		Cron:    cron.New(),
+		Queue:   q,
 	}
 }
 
@@ -45,7 +47,7 @@ func (s *Scheduler) Start() {
 
 func (s *Scheduler) PruneOldData(ctx context.Context) {
 	slog.Info("starting data pruning task")
-	res, err := s.DB.Exec(ctx, "DELETE FROM contests WHERE end_time < NOW() - INTERVAL '30 days'")
+	res, err := s.WriteDB.Exec(ctx, "DELETE FROM contests WHERE end_time < NOW() - INTERVAL '30 days'")
 	if err != nil {
 		slog.Error("failed to prune old contests", "error", err)
 	} else {
@@ -62,7 +64,7 @@ func (s *Scheduler) PruneOldData(ctx context.Context) {
 }
 
 func (s *Scheduler) CleanupOAuthStates(ctx context.Context) {
-	_, err := s.DB.Exec(ctx, "DELETE FROM oauth_states WHERE created_at < NOW() - INTERVAL '10 minutes'")
+	_, err := s.WriteDB.Exec(ctx, "DELETE FROM oauth_states WHERE created_at < NOW() - INTERVAL '10 minutes'")
 	if err != nil {
 		slog.Error("failed to cleanup oauth states", "error", err)
 	}
@@ -76,7 +78,7 @@ func (s *Scheduler) SyncAllUsers(ctx context.Context) {
 	limit := 500
 	offset := 0
 	for {
-		rows, err := s.DB.Query(ctx, "SELECT id FROM users ORDER BY id LIMIT $1 OFFSET $2", limit, offset)
+		rows, err := s.ReadDB.Query(ctx, "SELECT id FROM users ORDER BY id LIMIT $1 OFFSET $2", limit, offset)
 		if err != nil {
 			slog.Error("failed to fetch users for sync", "error", err)
 			return

@@ -2,49 +2,99 @@ package db
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
+	"log/slog"
+	"strings"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Init(ctx context.Context, databaseURL string, caCert []byte, connectionLimit int) (*pgxpool.Pool, error) {
-	if databaseURL == "" {
+type Pool struct {
+	write    *pgxpool.Pool
+	reads    []*pgxpool.Pool
+	readIdx  atomic.Uint64
+}
+
+func (p *Pool) WriteDB() *pgxpool.Pool {
+	return p.write
+}
+
+func (p *Pool) ReadDB() *pgxpool.Pool {
+	if len(p.reads) == 0 {
+		return p.write
+	}
+	idx := p.readIdx.Add(1) - 1
+	return p.reads[idx%uint64(len(p.reads))]
+}
+
+func (p *Pool) Close() {
+	if p.write != nil {
+		p.write.Close()
+	}
+	for _, r := range p.reads {
+		r.Close()
+	}
+}
+
+func newPool(ctx context.Context, dsn string, maxConns int32) (*pgxpool.Pool, error) {
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse DSN: %w", err)
+	}
+	cfg.MaxConns = maxConns
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create pool: %w", err)
+	}
+	if err := pool.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("unable to reach database: %w", err)
+	}
+	return pool, nil
+}
+
+func Init(ctx context.Context, writeURL string, readURLsRaw string, writeLimit int, poolLimit int) (*Pool, error) {
+	if writeURL == "" {
 		return nil, fmt.Errorf("POSTGRES_DB environment variable is not set")
 	}
 
-	config, err := pgxpool.ParseConfig(databaseURL)
+	writeConns := int32(10)
+	if writeLimit > 0 {
+		writeConns = int32(writeLimit)
+	}
+
+	readConns := int32(100)
+	if poolLimit > 0 {
+		readConns = int32(poolLimit)
+	}
+
+	writePool, err := newPool(ctx, writeURL, writeConns)
 	if err != nil {
-		return nil, fmt.Errorf("unable to parse database DSN: %w", err)
+		return nil, fmt.Errorf("write pool: %w", err)
 	}
 
-	if len(caCert) > 0 {
-		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(caCert) {
-			return nil, fmt.Errorf("failed to parse CA certificate PEM")
+	p := &Pool{write: writePool}
+
+	if readURLsRaw != "" {
+		rawURLs := strings.Split(readURLsRaw, ",")
+		for i, rawURL := range rawURLs {
+			rawURL = strings.TrimSpace(rawURL)
+			if rawURL == "" {
+				continue
+			}
+			rPool, err := newPool(ctx, rawURL, readConns)
+			if err != nil {
+				slog.Warn("read replica pool failed to connect, skipping", "replica", i, "error", err)
+				continue
+			}
+			p.reads = append(p.reads, rPool)
 		}
-		if config.ConnConfig.TLSConfig == nil {
-			config.ConnConfig.TLSConfig = &tls.Config{}
-		}
-		config.ConnConfig.TLSConfig.RootCAs = caCertPool
+		slog.Info("read replicas connected", "count", len(p.reads))
 	}
 
-	maxConns := int32(10)
-	if connectionLimit > 0 && connectionLimit <= 2147483647 {
-		maxConns = int32(connectionLimit)
-	}
-	config.MaxConns = maxConns
-
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create connection pool: %w", err)
+	if len(p.reads) == 0 {
+		slog.Info("no read replicas configured, using write pool for reads")
 	}
 
-	// Test connection
-	if err := pool.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("unable to connect to database: %w", err)
-	}
-
-	return pool, nil
+	return p, nil
 }

@@ -19,6 +19,7 @@ type AdminHandlers struct {
 	Scheduler     *scheduler.Scheduler
 	AdminPassword string
 	DB            *pgxpool.Pool
+	ReadDB        *pgxpool.Pool
 	Valkey        *redis.Client
 	Queue         *queue.Queue
 }
@@ -84,7 +85,7 @@ func (h *AdminHandlers) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		services := make(map[string]componentStatus)
 		allHealthy := true
 		pgLatency, pgErr := measure(func() error {
-			return checkPostgres(checkCtx, h.DB)
+			return checkPostgres(checkCtx, h.DB, h.ReadDB)
 		})
 		if pgErr != nil {
 			services["postgres"] = componentStatus{Status: "unhealthy", LatencyMs: pgLatency, Error: pgErr.Error()}
@@ -135,18 +136,26 @@ func (h *AdminHandlers) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 }
 
-func checkPostgres(ctx context.Context, pool *pgxpool.Pool) error {
-	tx, err := pool.Begin(ctx)
+func checkPostgres(ctx context.Context, writePool, readPool *pgxpool.Pool) error {
+	if readPool != nil {
+		var result int
+		err := readPool.QueryRow(ctx, "SELECT 1 + 1").Scan(&result)
+		if err != nil || result != 2 {
+			return fmt.Errorf("read pool check failed: %w", err)
+		}
+	} else {
+		var result int
+		err := writePool.QueryRow(ctx, "SELECT 1 + 1").Scan(&result)
+		if err != nil || result != 2 {
+			return fmt.Errorf("read query failed: %w", err)
+		}
+	}
+
+	tx, err := writePool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin transaction failed: %w", err)
+		return fmt.Errorf("begin write transaction failed: %w", err)
 	}
 	defer tx.Rollback(ctx)
-
-	var result int
-	err = tx.QueryRow(ctx, "SELECT 1 + 1").Scan(&result)
-	if err != nil || result != 2 {
-		return fmt.Errorf("read query failed: %w", err)
-	}
 
 	_, err = tx.Exec(ctx, "SELECT pg_sleep(0)")
 	if err != nil {

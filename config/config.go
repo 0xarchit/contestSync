@@ -9,8 +9,9 @@ import (
 
 type Config struct {
 	DatabaseURL            string
-	CACertificate          []byte
+	ReadDatabaseURLs       string
 	ConnectionLimit        int
+	ConnectionPoolLimit    int
 	GoogleClientID         string
 	GoogleClientSecret     string
 	GoogleRedirectURL      string
@@ -37,11 +38,6 @@ type Config struct {
 }
 
 func Load() *Config {
-	var caCert []byte
-	if raw := os.Getenv("CA_CERTIFICATE"); raw != "" {
-		caCert = []byte(raw)
-	}
-
 	kafkaAccessKey := []byte(os.Getenv("KAFKA_ACCESS_KEY"))
 	kafkaAccessCert := []byte(os.Getenv("KAFKA_ACCESS_CERTIFICATE"))
 	kafkaCACert := []byte(os.Getenv("KAFKA_CA_CERTIFICATE"))
@@ -58,7 +54,12 @@ func Load() *Config {
 
 	connLimit, _ := strconv.Atoi(os.Getenv("CONNECTION_LIMIT"))
 	if connLimit == 0 {
-		connLimit = 10
+		connLimit = 800
+	}
+
+	connPoolLimit, _ := strconv.Atoi(os.Getenv("CONNECTION_POOL_LIMIT"))
+	if connPoolLimit == 0 {
+		connPoolLimit = 10000
 	}
 
 	sessionSecret, err := hex.DecodeString(os.Getenv("SESSION_SECRET"))
@@ -95,8 +96,9 @@ func Load() *Config {
 
 	return &Config{
 		DatabaseURL:            os.Getenv("POSTGRES_DB"),
-		CACertificate:          caCert,
+		ReadDatabaseURLs:       os.Getenv("POSTGRES_READ_DB"),
 		ConnectionLimit:        connLimit,
+		ConnectionPoolLimit:    connPoolLimit,
 		GoogleClientID:         os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret:     os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GoogleRedirectURL:      os.Getenv("GOOGLE_REDIRECT_URL"),

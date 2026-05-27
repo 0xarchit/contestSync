@@ -42,3 +42,5 @@ CREATE INDEX idx_oauth_states_created ON oauth_states(created_at);
 CREATE INDEX idx_contests_platform_start ON contests(platform, start_time);
 CREATE INDEX idx_contests_start_time ON contests(start_time);
 CREATE INDEX idx_synced_events_contest_id ON synced_events(contest_id);
+CREATE INDEX idx_synced_events_user_id ON synced_events(user_id);
+CREATE INDEX idx_users_google_id ON users(google_id);

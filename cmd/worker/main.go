@@ -60,7 +60,7 @@ func main() {
 	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 
-	pool, err := db.Init(shutdownCtx, cfg.DatabaseURL, cfg.CACertificate, cfg.ConnectionLimit)
+	pool, err := db.Init(shutdownCtx, cfg.DatabaseURL, cfg.ReadDatabaseURLs, cfg.ConnectionLimit, cfg.ConnectionPoolLimit)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,13 +85,14 @@ func main() {
 	authProvider := auth.NewProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL)
 
 	syncer := &sync.Syncer{
-		DB:            pool,
+		DB:            pool.WriteDB(),
+		ReadDB:        pool.ReadDB(),
 		AuthProvider:  authProvider,
 		SessionSecret: cfg.EncryptionKey,
 		Valkey:        valkeyClient,
 	}
 
-	q, err := queue.New(cfg, pool, syncer)
+	q, err := queue.New(cfg, pool.WriteDB(), syncer)
 	if err != nil {
 		log.Fatalf("failed to initialize kafka queue: %v", err)
 	}
@@ -126,11 +127,17 @@ func main() {
 			pgStart := time.Now()
 			var pgErr error
 			if pool != nil {
-				tx, err := pool.Begin(checkCtx)
-				if err == nil {
-					tx.Rollback(checkCtx)
-				} else {
-					pgErr = err
+				if pool.ReadDB() != nil {
+					var result int
+					pgErr = pool.ReadDB().QueryRow(checkCtx, "SELECT 1 + 1").Scan(&result)
+				}
+				if pgErr == nil {
+					tx, err := pool.WriteDB().Begin(checkCtx)
+					if err == nil {
+						tx.Rollback(checkCtx)
+					} else {
+						pgErr = err
+					}
 				}
 			} else {
 				pgErr = fmt.Errorf("database pool not initialized")

@@ -25,6 +25,7 @@ import (
 
 type Syncer struct {
 	DB            *pgxpool.Pool
+	ReadDB        *pgxpool.Pool
 	AuthProvider  *auth.Provider
 	SessionSecret []byte
 	Valkey        *redis.Client
@@ -69,7 +70,11 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 	if !cacheFound {
 		var dbCalendarID sql.NullString
 		var dbEncryptedRefreshToken string
-		err := s.DB.QueryRow(ctx, "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, refresh_token FROM users WHERE id = $1", userID).Scan(
+		dbPool := s.ReadDB
+		if dbPool == nil {
+			dbPool = s.DB
+		}
+		err := dbPool.QueryRow(ctx, "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, refresh_token FROM users WHERE id = $1", userID).Scan(
 			&cachedUser.ID, &cachedUser.GoogleID, &cachedUser.Email, &dbCalendarID, &cachedUser.UseDedicated, &cachedUser.Platforms, &dbEncryptedRefreshToken,
 		)
 		if err != nil {
@@ -155,16 +160,49 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 	}
 
 	syncedMap := make(map[string]bool)
-	rows, err := s.DB.Query(ctx, "SELECT contest_id FROM synced_events WHERE user_id = $1", userID)
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var cid string
-			if err := rows.Scan(&cid); err != nil {
-				slog.Error("failed to scan contest ID", "error", err)
-				continue
+	var syncedIDs []string
+	cacheKeySE := models.SyncedEventsCacheKey(userID)
+	cacheFoundSE := false
+
+	if s.Valkey != nil {
+		val, err := s.Valkey.Get(ctx, cacheKeySE).Result()
+		if err == nil {
+			if err := json.Unmarshal([]byte(val), &syncedIDs); err == nil {
+				cacheFoundSE = true
 			}
+		}
+	}
+
+	if cacheFoundSE {
+		for _, cid := range syncedIDs {
 			syncedMap[cid] = true
+		}
+	} else {
+		dbPoolRead := s.ReadDB
+		if dbPoolRead == nil {
+			dbPoolRead = s.DB
+		}
+		rows, err := dbPoolRead.Query(ctx, "SELECT contest_id FROM synced_events WHERE user_id = $1", userID)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var cid string
+				if err := rows.Scan(&cid); err != nil {
+					slog.Error("failed to scan contest ID", "error", err)
+					continue
+				}
+				syncedMap[cid] = true
+				syncedIDs = append(syncedIDs, cid)
+			}
+			rows.Close()
+
+			if s.Valkey != nil {
+				if serialized, err := json.Marshal(syncedIDs); err == nil {
+					if err := s.Valkey.Set(ctx, cacheKeySE, string(serialized), models.SyncedEventsCacheTTL).Err(); err != nil {
+						slog.Error("failed to write synced events cache", "user_id", userID, "error", err)
+					}
+				}
+			}
 		}
 	}
 
@@ -189,7 +227,11 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 		}
 
 		if len(missedPlatforms) > 0 {
-			dbRows, err := s.DB.Query(ctx, "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW()", missedPlatforms)
+			dbPoolRead := s.ReadDB
+			if dbPoolRead == nil {
+				dbPoolRead = s.DB
+			}
+			dbRows, err := dbPoolRead.Query(ctx, "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW()", missedPlatforms)
 			if err != nil {
 				return err
 			}
@@ -219,7 +261,11 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 			}
 		}
 	} else {
-		rows, err = s.DB.Query(ctx, "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW()", platforms)
+		dbPoolRead := s.ReadDB
+		if dbPoolRead == nil {
+			dbPoolRead = s.DB
+		}
+		rows, err := dbPoolRead.Query(ctx, "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW()", platforms)
 		if err != nil {
 			return err
 		}
@@ -236,6 +282,7 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 		rows.Close()
 	}
 
+	anySynced := false
 	for _, c := range contests {
 		if syncedMap[c.ID] {
 			continue
@@ -287,6 +334,8 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 				_, err = s.DB.Exec(ctx, "INSERT INTO synced_events (user_id, contest_id, google_event_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", userID, c.ID, detID)
 				if err != nil {
 					slog.Error("failed to reconcile synced event on conflict", "user_id", userID, "contest_id", c.ID, "error", err)
+				} else {
+					anySynced = true
 				}
 				continue
 			}
@@ -297,6 +346,15 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 		_, err = s.DB.Exec(ctx, "INSERT INTO synced_events (user_id, contest_id, google_event_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", userID, c.ID, res.Id)
 		if err != nil {
 			slog.Error("failed to save synced event", "user_id", userID, "contest_id", c.ID, "error", err)
+		} else {
+			anySynced = true
+		}
+	}
+
+	if anySynced && s.Valkey != nil {
+		cacheKeySE := models.SyncedEventsCacheKey(userID)
+		if err := s.Valkey.Del(ctx, cacheKeySE).Err(); err != nil {
+			slog.Error("failed to invalidate synced events cache", "user_id", userID, "error", err)
 		}
 	}
 

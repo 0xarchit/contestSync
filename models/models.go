@@ -6,8 +6,10 @@ import (
 )
 
 const (
-	UserCacheTTL     = 24 * time.Hour
-	ContestsCacheTTL = 12 * time.Hour
+	UserCacheTTL         = 24 * time.Hour
+	ContestsCacheTTL     = 12 * time.Hour
+	SyncedEventsCacheTTL = 24 * time.Hour
+	PlatformsCacheTTL    = 24 * time.Hour
 )
 
 func UserCacheKey(userID int) string {
@@ -16,6 +18,14 @@ func UserCacheKey(userID int) string {
 
 func ContestsCacheKey(platform string) string {
 	return "cache:contests:" + platform
+}
+
+func SyncedEventsCacheKey(userID int) string {
+	return "cache:synced_events:" + strconv.Itoa(userID)
+}
+
+func PlatformsCacheKey() string {
+	return "cache:platforms"
 }
 
 type User struct {

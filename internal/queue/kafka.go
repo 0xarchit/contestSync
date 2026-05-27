@@ -413,7 +413,27 @@ func (q *Queue) handleExtraction(ctx context.Context, platform string) {
 	}
 
 	if len(contests) == 0 {
+		_, err = q.DB.Exec(ctx, "DELETE FROM contests WHERE platform = $1 AND start_time > NOW()", platform)
+		if err != nil {
+			slog.Error("failed to clear upcoming contests in consumer", "platform", platform, "error", err)
+		}
+		if q.Syncer != nil && q.Syncer.Valkey != nil {
+			cacheKey := models.ContestsCacheKey(platform)
+			if err := q.Syncer.Valkey.Del(ctx, cacheKey).Err(); err != nil {
+				slog.Error("failed to invalidate valkey cache", "platform", platform, "error", err)
+			}
+		}
 		return
+	}
+
+	newIDs := make([]string, 0, len(contests))
+	for _, c := range contests {
+		newIDs = append(newIDs, c.ID)
+	}
+
+	_, err = q.DB.Exec(ctx, "DELETE FROM contests WHERE platform = $1 AND start_time > NOW() AND id != ALL($2)", platform, newIDs)
+	if err != nil {
+		slog.Error("failed to prune obsolete upcoming contests in consumer", "platform", platform, "error", err)
 	}
 
 	batch := &pgx.Batch{}
