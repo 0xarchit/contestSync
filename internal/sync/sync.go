@@ -112,6 +112,12 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 			status = "failed"
 		}
 		s.DB.Exec(context.Background(), "UPDATE users SET sync_status = $1, last_sync_at = NOW() WHERE id = $2", status, userID)
+		if s.Valkey != nil {
+			cacheKey := fmt.Sprintf("user:last_sync_at:%d", userID)
+			if err := s.Valkey.Set(context.Background(), cacheKey, time.Now().Format(time.RFC3339), 1*time.Hour).Err(); err != nil {
+				slog.Error("failed to update last sync time cache", "user_id", userID, "error", err)
+			}
+		}
 	}()
 
 	refreshToken, err := auth.DecryptToken(encryptedRefreshToken, s.SessionSecret)

@@ -30,6 +30,13 @@
     <div class="noise-overlay"></div>
     <div class="pref-container">
       <div class="pref-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
+          <a href="/" style="font-size:var(--t-label); color:var(--text-dim); text-decoration:none; display:flex; align-items:center; gap:0.4rem; transition:color 0.2s;" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-dim)'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Home
+          </a>
+          <span style="font-size:var(--t-label); color:var(--text-dim); font-family:'IBM Plex Mono',monospace;">contestsync/preferences</span>
+        </div>
         <div id="user-email" class="user-email"></div>
         <h1>Choose your platforms</h1>
         <p>We'll sync contests from these to your Google Calendar.</p>
@@ -61,6 +68,11 @@
           >
             Start Sync
           </button>
+          <div style="text-align: center; margin-top: 1rem;">
+            <p style="font-size: 0.8rem; color: var(--text-dim); font-family: 'IBM Plex Mono', monospace;">
+              * Sync requests are queued and take a few minutes to appear in your calendar.
+            </p>
+          </div>
         </form>
       </div>
     </div>

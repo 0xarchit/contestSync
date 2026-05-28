@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -34,6 +35,50 @@ type Handlers struct {
 
 func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(ContextKeyUserID).(int)
+
+	var lastSyncAt *time.Time
+	cacheKey := fmt.Sprintf("user:last_sync_at:%d", userID)
+	cacheFound := false
+
+	if h.Valkey != nil {
+		val, err := h.Valkey.Get(r.Context(), cacheKey).Result()
+		if err == nil && val != "" {
+			if t, parseErr := time.Parse(time.RFC3339, val); parseErr == nil {
+				lastSyncAt = &t
+				cacheFound = true
+			}
+		}
+	}
+
+	if !cacheFound {
+		readPool := h.ReadDB
+		if readPool == nil {
+			readPool = h.DB
+		}
+		err := readPool.QueryRow(r.Context(), "SELECT last_sync_at FROM users WHERE id = $1", userID).Scan(&lastSyncAt)
+		if err != nil {
+			slog.Error("failed to check last sync time from read db", "user_id", userID, "error", err)
+			http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+			return
+		}
+
+		if h.Valkey != nil && lastSyncAt != nil {
+			if err := h.Valkey.Set(r.Context(), cacheKey, lastSyncAt.Format(time.RFC3339), 1*time.Hour).Err(); err != nil {
+				slog.Error("failed to cache last sync time", "user_id", userID, "error", err)
+			}
+		}
+	}
+
+	if lastSyncAt != nil && time.Since(*lastSyncAt) < 15*time.Minute {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":  "rate_limited",
+			"message": "Please wait 15 minutes between manual syncs.",
+		})
+		return
+	}
+
 	if err := h.Queue.PublishSyncTask(r.Context(), userID); err != nil {
 		slog.Error("manual sync queuing failed", "user_id", userID, "error", err)
 		http.Error(w, `{"error":"sync failed to queue"}`, http.StatusInternalServerError)
@@ -359,23 +404,97 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, err := h.DB.Exec(r.Context(), "UPDATE users SET platforms = $1, use_dedicated = $2 WHERE id = $3", req.Platforms, req.UseDedicated, userID)
-	if err != nil {
-		slog.Error("failed to update user platforms", "user_id", userID, "error", err)
-		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
-		return
-	}
+	var currentPlatforms []string
+	var currentUseDedicated bool
+	cacheKey := models.UserCacheKey(userID)
+	cacheFound := false
 
 	if h.Valkey != nil {
-		cacheKey := models.UserCacheKey(userID)
-		if err := h.Valkey.Del(r.Context(), cacheKey).Err(); err != nil {
-			slog.Error("failed to invalidate user cache on preference update", "user_id", userID, "error", err)
+		cachedVal, err := h.Valkey.Get(r.Context(), cacheKey).Result()
+		if err == nil {
+			var cachedUser models.CachedUser
+			if err := json.Unmarshal([]byte(cachedVal), &cachedUser); err == nil {
+				currentPlatforms = cachedUser.Platforms
+				currentUseDedicated = cachedUser.UseDedicated
+				cacheFound = true
+			}
+		}
+	}
+
+	if !cacheFound {
+		readPool := h.ReadDB
+		if readPool == nil {
+			readPool = h.DB
+		}
+		var cachedUser models.CachedUser
+		var calendarID sql.NullString
+		var encryptedRefreshToken string
+		err := readPool.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, refresh_token FROM users WHERE id = $1", userID).Scan(
+			&cachedUser.ID, &cachedUser.GoogleID, &cachedUser.Email, &calendarID, &cachedUser.UseDedicated, &cachedUser.Platforms, &encryptedRefreshToken,
+		)
+		if err != nil {
+			slog.Error("failed to fetch current preferences from read db", "user_id", userID, "error", err)
+			http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+			return
+		}
+		cachedUser.CalendarID = ""
+		if calendarID.Valid {
+			cachedUser.CalendarID = calendarID.String
+		}
+		cachedUser.RefreshToken = encryptedRefreshToken
+
+		currentPlatforms = cachedUser.Platforms
+		currentUseDedicated = cachedUser.UseDedicated
+
+		if h.Valkey != nil {
+			if serialized, err := json.Marshal(cachedUser); err == nil {
+				if err := h.Valkey.Set(r.Context(), cacheKey, string(serialized), models.UserCacheTTL).Err(); err != nil {
+					slog.Error("failed to write user cache in save preferences", "user_id", userID, "error", err)
+				}
+			}
+		}
+	}
+
+	changed := false
+	if len(req.Platforms) != len(currentPlatforms) || req.UseDedicated != currentUseDedicated {
+		changed = true
+	} else {
+		counts := make(map[string]int)
+		for _, p := range currentPlatforms {
+			counts[p]++
+		}
+		for _, p := range req.Platforms {
+			counts[p]--
+		}
+		for _, c := range counts {
+			if c != 0 {
+				changed = true
+				break
+			}
+		}
+	}
+
+	if changed {
+		_, err := h.DB.Exec(r.Context(), "UPDATE users SET platforms = $1, use_dedicated = $2 WHERE id = $3", req.Platforms, req.UseDedicated, userID)
+		if err != nil {
+			slog.Error("failed to update user platforms in write db", "user_id", userID, "error", err)
+			http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+			return
+		}
+
+		if h.Valkey != nil {
+			if err := h.Valkey.Del(r.Context(), cacheKey).Err(); err != nil {
+				slog.Error("failed to invalidate user cache on preference update", "user_id", userID, "error", err)
+			}
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "ok",
+		"changed": changed,
+	})
 }
 func generateRandomString(n int) (string, error) {
 	b := make([]byte, n)

@@ -337,8 +337,32 @@ async function initPreferences() {
             use_dedicated: useDedicated,
           });
           if (res) {
-            await securePost("/sync", {});
-            showSuccess();
+            if (res.changed) {
+              try {
+                let syncRes = await securePost("/sync", {});
+                if (syncRes && syncRes.status === "rate_limited") {
+                  showSuccess(
+                    "Preferences updated! Sync is rate-limited.",
+                    "Since you synced recently, your new choices will be automatically updated on the next hourly schedule."
+                  );
+                } else {
+                  showSuccess(
+                    "Preferences saved and sync queued!",
+                    "Your calendar is being updated with the new platform selections."
+                  );
+                }
+              } catch (syncErr) {
+                showSuccess(
+                  "Preferences saved successfully.",
+                  "Calendar updates will apply automatically on the next scheduled run."
+                );
+              }
+            } else {
+              showSuccess(
+                "Preferences saved!",
+                "Your selections are already up to date. No new sync required."
+              );
+            }
           }
         } catch (err) {
           console.error("Pref: save failed", err);
@@ -402,9 +426,12 @@ function getCSRFToken() {
   return csrfToken;
 }
 
-function showSuccess() {
+function showSuccess(message, subMessage) {
   let card = document.querySelector(".pref-card");
   if (!card) return;
+
+  let mainMsg = message || "Your sync request has been added to the queue.";
+  let subMsg = subMessage || "Contests will appear in your Google Calendar within a few minutes.";
 
   gsap.to(card, {
     opacity: 0,
@@ -413,16 +440,22 @@ function showSuccess() {
     onComplete: () => {
       card.innerHTML = `
                 <div class="success-state centered">
-                    <div style="margin-bottom:2rem;">
-                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <div style="margin-bottom:1.5rem;">
+                        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                     </div>
                     <h1>You're all set.</h1>
-                    <p>Contests are syncing to your Google Calendar.</p>
-                    <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="margin-top:1rem;">
-                        Open Google Calendar
-                    </a>
+                    <p>${mainMsg}</p>
+                    <p style="margin-top:0.5rem; font-size:var(--t-label); color:var(--text-dim);">${subMsg}</p>
+                    <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; margin-top:1.5rem;">
+                        <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+                            Open Google Calendar
+                        </a>
+                        <a href="/" class="btn btn-ghost" style="padding:1rem 1.5rem; border:1px solid var(--bg-border); border-radius:8px;">
+                            ← Back to Home
+                        </a>
+                    </div>
                 </div>
             `;
       gsap.fromTo(
@@ -432,6 +465,50 @@ function showSuccess() {
       );
     },
   });
+}
+
+function showToast(message, type = "success") {
+  let container = document.querySelector(".toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.className = "toast-container";
+    document.body.appendChild(container);
+  }
+
+  let toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+
+  let icon = "";
+  if (type === "success") {
+    icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+  } else if (type === "error") {
+    icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+  } else if (type === "info") {
+    icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
+  }
+
+  toast.innerHTML = `
+    <span class="toast-icon">${icon}</span>
+    <span class="toast-message">${message}</span>
+  `;
+  container.appendChild(toast);
+
+  gsap.fromTo(
+    toast,
+    { opacity: 0, y: 20, scale: 0.9 },
+    { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power3.out" }
+  );
+
+  setTimeout(() => {
+    gsap.to(toast, {
+      opacity: 0,
+      y: -20,
+      scale: 0.9,
+      duration: 0.4,
+      ease: "power3.in",
+      onComplete: () => toast.remove(),
+    });
+  }, 4000);
 }
 
 function initGlobalInteractivity() {
@@ -523,6 +600,25 @@ function initGlobalInteractivity() {
   fetchGitHubStars();
 }
 
+function initFAQ() {
+  document.querySelectorAll(".faq-item").forEach((item) => {
+    const btn = item.querySelector(".faq-q");
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      const isOpen = item.classList.contains("open");
+      document.querySelectorAll(".faq-item").forEach((i) => {
+        i.classList.remove("open");
+        const q = i.querySelector(".faq-q");
+        if (q) q.setAttribute("aria-expanded", "false");
+      });
+      if (!isOpen) {
+        item.classList.add("open");
+        btn.setAttribute("aria-expanded", "true");
+      }
+    });
+  });
+}
+
 async function fetchGitHubStars() {
   const elMain = document.getElementById("github-stars-count");
   const elAbout = document.getElementById("github-stars-count-about");
@@ -547,6 +643,7 @@ window.addEventListener("load", () => {
   setTimeout(() => {
     initApp();
     initGlobalInteractivity();
+    initFAQ();
   }, 100);
 });
 
