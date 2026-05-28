@@ -5,7 +5,7 @@
 <h1 align="center">ContestSync</h1>
 
 <p align="center">
-  <strong>Enterprise-Grade SaaS & Open-Source Synchronization Engine for Competitive Programming Calendars.</strong>
+  <strong>Enterprise-Grade Open-Source Synchronization Engine & SaaS Platform for Competitive Programming Calendars.</strong>
 </p>
 
 <p align="center">
@@ -17,268 +17,317 @@
 
 ---
 
-ContestSync is a robust, high-performance web platform and background worker ecosystem designed to automatically synchronize competitive programming contests from major platforms directly to Google Calendar. By integrating advanced caching, distributed queues, secure cryptography, and low-latency asset rendering, ContestSync provides developers and competitive programmers worldwide with a flawless, automated scheduling interface.
-
-## Supported Platforms
-
-* **LeetCode** (GraphQL Fetcher)
-* **Codeforces** (Active Contest API Filter)
-* **CodeChef** (REST API Fetcher)
-* **AtCoder** (HTML Scraper)
-* **HackerRank** (REST API Fetcher)
-* **GeeksforGeeks** (REST API Parser)
-* **Naukri Code360** (Active Event API)
+ContestSync is a robust, highly optimized web platform and distributed worker system designed to automatically synchronize competitive programming contests from major platforms directly to Google Calendar. By integrating advanced replication pooling, distributed caching, secure cryptography, and low-latency asset rendering, ContestSync provides developers and competitive programmers with an automated, zero-maintenance scheduling interface.
 
 ---
 
-## Architecture Highlights
+## Supported Platforms & Integration Specs
 
-ContestSync utilizes a decoupled, resilient architecture dividing responsibilities between the Web Client, the API Web Server, a Standalone Background Worker, PostgreSQL, Valkey, and Apache Kafka.
+| Platform | Scraper/API Type | Fetch Payload Format | Update Frequency | Rate Limit Strategy |
+| :--- | :--- | :--- | :--- | :--- |
+| **LeetCode** | GraphQL Endpoint | JSON Query Payload | Daily Cron Trigger | Dynamic Backoff + Retries |
+| **Codeforces** | REST API Filter | HTTP JSON Response | Daily Cron Trigger | Local Token Bucket Gating |
+| **CodeChef** | REST API Fetcher | Nested JSON Payload | Daily Cron Trigger | Session Connection Pool |
+| **AtCoder** | HTML Scraper | DOM Node Parsing | Daily Cron Trigger | Strict User Agent Gating |
+| **HackerRank** | REST API Fetcher | Flat JSON Document | Daily Cron Trigger | Secure Host Verification |
+| **GeeksforGeeks**| REST API Parser | Raw JSON Payload | Daily Cron Trigger | Bounded Payload Capping |
+| **Naukri Code360**| REST API Parser | Structured JSON Array | Daily Cron Trigger | Dynamic Event Mapping |
 
-### High-Level System Design
+---
+
+## Topological System Architecture
 
 ```mermaid
-graph TD
-    subgraph Client Tier
-        Browser["Web Browser (Vanilla JS, GSAP, Lenis)"]
+graph TB
+    subgraph ClientTier["Client Interface Layer"]
+        Browser["Browser UI (HTML5, Vanilla JS, GSAP Animations, Lenis)"]
     end
 
-    subgraph Service Tier
-        Server["Server Binary (Chi Router, Handlers, Scheduler)"]
-        Worker["Worker Binary (Queue Consumers, Health Server)"]
+    subgraph ServiceTier["Dual-Binary Service Tier"]
+        Server["API Web Server (cmd/server)<br/>- Chi Router & Session Middleware<br/>- In-Memory Static Asset Compiler<br/>- Distributed sliding-window Rate Limiter"]
+        Worker["Background Worker (cmd/worker)<br/>- Semaphore-Bounded Task Consumers<br/>- Dedicated Kubernetes HTTP /health probe server"]
     end
 
-    subgraph Queueing & Event Hub
-        Kafka["Apache Kafka (Topics: sync-tasks, extraction-tasks)"]
-        InMem["In-Memory Channels (Local Queue Fallback)"]
+    subgraph BrokerTier["Decoupled Message Broker Hub"]
+        Kafka["Apache Kafka Cluster<br/>- Topics: sync-tasks, extraction-tasks<br/>- Bounded Partitions / Replicas"]
+        InMem["In-Memory Local Channels<br/>- Zero-Dependency Local Queue Fallback"]
     end
 
-    subgraph Cache & Lock Tier
-        Valkey["Valkey Store (Distributed Locks, Sessions, Rate Limits)"]
+    subgraph CacheLockTier["Distributed Valkey Cache & Locking Layer"]
+        Valkey["Valkey Server Instance<br/>- cache:user:id (User Preferences)<br/>- cache:contests:platform (Platform Contests)<br/>- cache:synced_events:id (Sync Registry)<br/>- cache:platforms (Static Lists)<br/>- lock:sync:id (Distributed Mutex Locks)<br/>- session:id (Gorilla Web Sessions)"]
     end
 
-    subgraph Database Tier
-        DB["PostgreSQL (Users, Contests, Synced Events, OAuth States)"]
+    subgraph DB_Tier["Replicated Neon Database Cluster (Read/Write Split)"]
+        DB_Write["Neon DB Primary (Write Primary)<br/>- Active write transactions<br/>- Direct connections for migrations"]
+        
+        subgraph Replicas["Neon Replica Pool (Round-Robin Counted)"]
+            DB_Read1["Neon DB Replica 1"]
+            DB_Read2["Neon DB Replica 2"]
+            DB_Read3["Neon DB Replica 3"]
+        end
     end
 
-    subgraph External Services
+    subgraph ExternalAPI["External Services Integration"]
         Google["Google Calendar API (v3)"]
         LeetCode["LeetCode GraphQL"]
         Codeforces["Codeforces API"]
         CodeChef["CodeChef API"]
-        AtCoder["AtCoder Web"]
+        AtCoder["AtCoder Web Scraper"]
         HackerRank["HackerRank API"]
         GFG["GeeksforGeeks API"]
         Code360["Code360 API"]
     end
 
-    Browser <-->|HTTP / JSON / HTML| Server
-    Server -->|Publish Tasks| Kafka
-    Server -.->|Local Channels| InMem
-    Worker -->|Consume Tasks| Kafka
-    Worker -.->|Local Channels| InMem
+    Browser <-->|HTTP / REST / JSON| Server
+    Server -->|Publish Sync & Extraction Tasks| Kafka
+    Server -.->|Local Channel Fallbacks| InMem
+    Worker -->|Consume Tasks & Execute Workflows| Kafka
+    Worker -.->|Local Channel Fallbacks| InMem
 
-    Server -->|Session & Rate Limits| Valkey
-    Worker -->|Sync Locks| Valkey
+    Server -->|Rate Limits & Sessions| Valkey
+    Worker -->|Distributed Lock Mutexes| Valkey
+    Worker -->|Cache Reads / Writes| Valkey
 
-    Server -->|Read / Write| DB
-    Worker -->|Read / Write| DB
+    Server -->|Write Transactions & Migrations| DB_Write
+    Worker -->|Write Transactions| DB_Write
 
-    Worker -->|Google Calendar OAuth| Google
-    Worker -->|Fetch Contests| LeetCode
-    Worker -->|Fetch Contests| Codeforces
-    Worker -->|Fetch Contests| CodeChef
-    Worker -->|Fetch Contests| AtCoder
-    Worker -->|Fetch Contests| HackerRank
-    Worker -->|Fetch Contests| GFG
-    Worker -->|Fetch Contests| Code360
+    Server -->|Round-Robin Read Queries| Replicas
+    Worker -->|Round-Robin Read Queries| Replicas
+
+    Worker -->|OAuth Handshake & Event Ingestion| Google
+    Worker -->|Scrape Contests| LeetCode
+    Worker -->|Scrape Contests| Codeforces
+    Worker -->|Scrape Contests| CodeChef
+    Worker -->|Scrape Contests| AtCoder
+    Worker -->|Scrape Contests| HackerRank
+    Worker -->|Scrape Contests| GFG
+    Worker -->|Scrape Contests| Code360
 ```
 
 ---
 
-## Core SaaS & Open-Source Capabilities
+## Core SaaS & Enterprise Capabilities
 
-### 1. In-Memory Static Asset Compiler & Minifier
-* **Zero Disk Overhead**: Static assets (HTML, CSS, JS) are read, parsed, and compiled into memory exactly once at server boot.
-* **On-the-Fly Minification**: Strips comments, collapses whitespaces, and removes excessive formatting programmatically to optimize payload sizes without local npm compilation chains.
-* **Aggressive Revalidation Caching**: Assets are served with deterministic SHA256 ETags and maximum lifetime cache directives (`Cache-Control: public, max-age=31536000, must-revalidate`), assuring lightning-fast load times.
+### 1. High-Concurrency Neon DB Read/Write Split Engine
+* **Isolation of Concerns**: Database operations are split into separate Write Primary and multiple Read Replica connection pools.
+* **Atomic Round-Robin Distribution**: Reads are distributed across replicas using lock-free atomic round-robin counters, utilizing the Neon DB pool endpoints for high performance.
+* **Massive Concurrency Support**: Integrates PgBouncer configurations, allowing up to 10,000 concurrent pooled connections per read replica, while direct connections are preserved for write paths and migrations.
+* **In-Memory CA Validation**: Implements in-memory PEM certificate loading for database connections, avoiding disk leakage issues.
 
-### 2. Distributed Valkey Cache-Aside & Coherence Tier
-* **High-Speed Cache-Aside**: Fetches active platforms and user preferences directly from Valkey, reducing PostgreSQL read pressure.
-* **O(1) Cold Starts**: Merges multiple platform cache misses into a single batched database query using array matching.
-* **Instant Invalidation**: Scrapers and preference changes immediately purge invalid caches (`cache:contests:<platform>` and `cache:user:<userID>`), keeping backend states perfectly coherent.
+### 2. Multi-Tier Distributed Valkey Caching Model
 
-### 3. Queue-Driven Concurrency & Backpressure control
-* **Dual-Mode Queue Broker**: Supports a distributed Apache Kafka cluster for horizontal scalability, or dynamically falls back to optimized, thread-safe in-memory channels when no Kafka host is configured.
-* **Semaphore-Gated Concurrency**: Restricts active goroutines (max 10 concurrent user syncs and 3 platform extractions) to prevent memory spikes and API rate limit locks.
+| Caching Area | Cache Key Format | Time To Live (TTL) | Eviction Trigger | Storage Format |
+| :--- | :--- | :--- | :--- | :--- |
+| **Contests List** | `cache:contests:<platform>` | 12 Hours | Crawler batch finished | JSON Contest Array |
+| **User Preferences** | `cache:user:<userID>` | 24 Hours | Google OAuth callback / Preferences save / Account deletion | JSON Profile Struct |
+| **Synced Events** | `cache:synced_events:<userID>` | 24 Hours | End of SyncUser run (if new sync recorded) | JSON String Array |
+| **Platforms List**| `cache:platforms` | 24 Hours | Static Compile (None) | Pre-serialized JSON |
+| **IP Rate Limiter** | `limit:<ip_address>:<window>` | Variable (Dynamic) | Auto-Expires on window end | Numeric string counter |
+| **User Sessions** | `session:<session_id>` | 7 Days | Account logout | Encoded Gorilla Session |
 
-### 4. Zero-Trust Security Gating
-* **At-Rest AES-256-GCM Encryption**: Encrypts and decrypts Google Calendar OAuth2 Refresh Tokens securely using standard cryptographic keys.
-* **Cookie-less Session-Bound CSRF validation**: State-modifying requests verify CSRF signatures embedded strictly inside secure session keys, eliminating double-submit cookie exposure.
-* **Session Regeneration**: Session IDs are fully cleared and rotated upon successful login callbacks to safeguard users against session fixation exploits.
-* **Payload Gating**: Request bodies are capped at 1MB and admin authentication headers are bounded to 256 bytes to prevent buffer and memory exhaustion attempts.
+### 3. Real-Time Contest Overwrite & Obsolete Contest Pruning
+* **Dynamic Pruning**: When scrapers run, a cleanup operation is executed: `DELETE FROM contests WHERE platform = $1 AND start_time > NOW() AND id != ALL($2)`. This deletes upcoming contests that were rescheduled or cancelled on the host platform.
+* **Boundary Integrity**: The prune query is locked to upcoming contests (`start_time > NOW()`). This preserves past contests and their synced events, preventing redundant event syncs or double-syncing.
+* **Safe Overwrite**: If a scrape returns zero upcoming contests, all future scheduled entries for that platform are deleted.
 
-### 5. Deterministic Idempotency & Conflict Resolution
-* **Deterministic Event IDs**: Hashes the combination of user credentials and contest metadata into a base32hex string passed directly to the Google Calendar API as the event's unique identifier.
-* **409 Conflict Reconciliation**: Catches and processes duplicate calendar sync triggers gracefully, maintaining sync integrity without duplicate event pollution.
+### 4. Security Controls Matrix (Zero-Trust Security Gating)
 
----
-
-## Deep-Dive Component Architecture
-
-### 1. API Web Server (`cmd/server`)
-* **Routing**: Driven by Go Chi Router with structured log tracing.
-* **State Management**: Uses Gorilla Sessions, dynamically choosing Valkey or fallback Cookie Stores.
-* **Rate Limiting**: Distributed IP rate-limiting powered by Valkey with a dynamic retry interval header. Auto-falls back to a thread-safe local LRU cache (10,000 size capacity) on redis connection interruptions.
-
-### 2. Background Worker (`cmd/worker`)
-* **Task Consumers**: Consumes and processes background workloads.
-* **Health Probes**: Runs a dedicated micro-server providing a `/health` endpoint for Kubernetes/orchestration validation.
-
-### 3. Automated Cron Scheduler (`internal/scheduler`)
-* **Extractions**: Daily trigger to fetch contest lists.
-* **Syncs**: Daily trigger to update all active user calendars.
-* **Data Pruning**: Daily trigger that purges events older than 30 days.
-* **OAuth Cleans**: Ticker running every 15 minutes to purge stale transient states.
+| Threat Vector | Security Countermeasure | Implementation Layer | Target Boundary |
+| :--- | :--- | :--- | :--- |
+| **Token Exposure** | AES-256-GCM Cryptographic Envelope | `internal/auth` | Google OAuth Refresh Tokens |
+| **CSRF Exploit** | Session-Bound Verification Gating | `internal/api` | State-Modifying Endpoints (`POST`/`DELETE`) |
+| **Session Fixation** | Complete Session ID Regeneration | `internal/api` | Google Callback Post-Authorization Handshake |
+| **Memory Exhaustion** | Body Limit Constraints & Monitored Headers | `internal/api` | Capped Request Payload (1MB) / Headers (256B) |
+| **IP Spoofing** | Environment-Gated Trust Gating | `internal/api` | `TRUST_PROXY` Toggle validation |
 
 ---
 
-## System Flowcharts
+## Detailed System Workflows
 
 ### 1. Authentication Lifecycle
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User
-    participant Browser
-    participant Server
-    participant GoogleAuth as Google OAuth
-    participant DB as PostgreSQL
-    participant Valkey
+    actor User as Competitive Programmer
+    participant Browser as Web Browser
+    participant Server as Server Binary (cmd/server)
+    participant GoogleAuth as Google OAuth Service
+    participant DB_Write as Neon DB Primary
+    participant Valkey as Valkey Distributed Cache
 
-    User->>Browser: Click "Sign in with Google"
+    User->>Browser: Click 'Sign in with Google'
     Browser->>Server: GET /auth/google
-    Server->>DB: INSERT INTO oauth_states (state)
-    Server->>Browser: Redirect to Google Consent Screen
-    Browser->>GoogleAuth: Request authorization
-    GoogleAuth->>User: Display consent prompt
-    User->>GoogleAuth: Approve permissions
-    GoogleAuth->>Browser: Redirect to /auth/google/callback?code=CODE&state=STATE
+    Server->>Server: Generate secure random state token
+    Server->>DB_Write: Store state: INSERT INTO oauth_states (state)
+    Server->>Browser: Set secure HttpOnly 'oauth_state' cookie
+    Server->>Browser: Redirect to Google OAuth consent page
+    Browser->>GoogleAuth: Direct browser request with client_id, scopes, and state
+    GoogleAuth->>User: Render permissions consent dialog
+    User->>GoogleAuth: Authorize request (Calendar & Profile scopes)
+    GoogleAuth->>Browser: Redirect callback: /auth/google/callback?code=CODE&state=STATE
     Browser->>Server: GET /auth/google/callback?code=CODE&state=STATE
-    Server->>DB: Verify and delete state from oauth_states
-    Server->>GoogleAuth: Exchange CODE for Access & Refresh Tokens
-    GoogleAuth->>Server: Return tokens
-    Server->>Server: Encrypt Refresh Token (AES-256-GCM)
-    Server->>DB: INSERT/UPDATE user details
-    Server->>Valkey: Create Session (session_id -> user_id, csrf_token)
-    Server->>Browser: Set HTTP-Only Session Cookie
-    Browser->>User: Show Preferences Dashboard
+    Server->>Server: Validate state cookie match
+    Server->>DB_Write: Revalidate & purge state: DELETE FROM oauth_states WHERE state = STATE
+    DB_Write-->>Server: Return deleted state status
+    Server->>GoogleAuth: Request tokens: Exchange authorization CODE
+    GoogleAuth-->>Server: Return Access Token & Refresh Token
+    Server->>Server: Encrypt Refresh Token using AES-256-GCM
+    Server->>DB_Write: Upsert User Profile: INSERT/UPDATE users table
+    DB_Write-->>Server: Return active user_id
+    Server->>Valkey: Evict stale profile: DEL cache:user:id
+    Server->>Server: Rotate and regenerate Session ID
+    Server->>Valkey: Write dynamic session payload: SET session:session_id
+    Server->>Browser: Set secure HttpOnly Session cookie
+    Browser->>User: Redirect & render Preferences Dashboard
 ```
 
-### 2. Background Synchronization
+### 2. Background Synchronization & Caching Layer
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User
-    participant Browser
-    participant Server
-    participant Queue as Queue (Kafka / In-Memory)
-    participant Worker
-    participant Valkey
-    participant DB as PostgreSQL
+    actor User as Competitive Programmer
+    participant Browser as Web Browser
+    participant Server as Server Binary (cmd/server)
+    participant Queue as Queue Broker (Kafka / Local)
+    participant Worker as Background Worker (cmd/worker)
+    participant Valkey as Valkey Cache
+    participant DB_Read as Neon DB Replicas (Round-Robin)
+    participant DB_Write as Neon DB Primary
     participant GoogleCal as Google Calendar API
 
-    User->>Browser: Click "Sync Now"
+    User->>Browser: Click 'Sync Now'
     Browser->>Server: POST /sync (with X-CSRF-Token header)
-    Server->>Server: Validate Session and CSRF Token
-    Server->>Queue: Publish SyncTask (user_id)
-    Server->>Browser: Return 202 Accepted
-    Browser->>User: Show "Syncing..." status
+    Server->>Server: Verify session & check CSRF signature
+    Server->>Queue: Publish sync task: PublishSyncTask(user_id)
+    Server-->>Browser: Return 202 Accepted response
+    Browser->>User: Display 'Syncing in background' UI status
 
-    Queue->>Worker: Consume SyncTask (user_id)
-    Worker->>Valkey: SetNX (lock:sync:user_id, TTL=5m)
-    alt Lock Acquired
-        Worker->>DB: SELECT user profile & encrypted refresh token
-        Worker->>Server: Decrypt Refresh Token (AES-256-GCM)
-        Worker->>DB: UPDATE user sync_status = 'syncing'
-        Worker->>GoogleCal: Get timezone / Resolve dedicated calendar
-        Worker->>DB: SELECT synced_events and future contests
-        loop For each unsynced contest
-            Worker->>Worker: Compute deterministic Event ID
-            loop Try up to 3 times (Exponential Backoff)
-                Worker->>GoogleCal: Insert Event
-                GoogleCal-->>Worker: Status 200 OK / 409 Conflict
+    Queue->>Worker: Consume sync task: ConsumeSyncTask(user_id)
+    Worker->>Valkey: Acquire lock: SetNX lock:sync:user_id (TTL=5m)
+    alt Lock Acquired successfully
+        Worker->>Valkey: Query cached profile: GET cache:user:user_id
+        alt Cache Hit
+            Valkey-->>Worker: Return profile data
+        else Cache Miss
+            Worker->>DB_Read: SELECT profile & encrypted token from Replicas
+            DB_Read-->>Worker: Return database user record
+            Worker->>Valkey: SET cache:user:user_id (24h TTL)
+        end
+        Worker->>Worker: Decrypt Google OAuth Refresh Token (AES-256-GCM)
+        Worker->>DB_Write: Update sync status: UPDATE users SET sync_status = 'syncing'
+        Worker->>GoogleCal: Query primary calendar settings & verify credentials
+        Worker->>Valkey: Query synced history: GET cache:synced_events:user_id
+        alt Cache Hit
+            Valkey-->>Worker: Return synced contest IDs list
+        else Cache Miss
+            Worker->>DB_Read: SELECT contest_id FROM synced_events
+            DB_Read-->>Worker: Return synced records list
+            Worker->>Valkey: SET cache:synced_events:user_id (24h TTL)
+        end
+        Worker->>DB_Read: SELECT future contests: SELECT id FROM contests
+        DB_Read-->>Worker: Return contests list
+        loop For each unsynced future contest
+            Worker->>Worker: Generate deterministic Base32hex Event ID
+            loop Retry up to 3 times (Exponential Backoff)
+                Worker->>GoogleCal: Send event insert request
+                GoogleCal-->>Worker: Return 200 OK / 409 Conflict status
             end
-            alt Status 200 OK
-                Worker->>DB: INSERT INTO synced_events
-            else Status 409 Conflict
-                Worker->>DB: INSERT INTO synced_events (ON CONFLICT DO NOTHING)
+            alt Event Inserted successfully (200 OK)
+                Worker->>DB_Write: Log event: INSERT INTO synced_events
+                Worker->>Worker: Set anySynced = true
+            else Event already exists (409 Conflict)
+                Worker->>DB_Write: Reconcile event: INSERT INTO synced_events (ON CONFLICT DO NOTHING)
+                Worker->>Worker: Set anySynced = true
             end
         end
-        Worker->>DB: UPDATE user sync_status = 'success', last_sync_at = NOW()
-        Worker->>Valkey: Del (lock:sync:user_id)
-    else Lock Busy
-        Worker-->>Worker: Terminate task
+        alt if anySynced is true
+            Worker->>Valkey: Invalidate synced events cache: DEL cache:synced_events:user_id
+        end
+        Worker->>DB_Write: Log success: UPDATE users SET sync_status = 'success', last_sync_at = NOW()
+        Worker->>Valkey: Release synchronization lock: DEL lock:sync:user_id
+    else Lock is Busy
+        Worker-->>Worker: Task rejected, exit process early
     end
 ```
 
 ---
 
-## Stack Specifications
+## Codebase Component Topology
 
-* **Frontend**: Responsive CSS, Vanilla JS, GSAP Animations, Lenis Smooth Scroll.
-* **Backend Core**: Golang (1.26+), Chi Router, pgx/v5 Pool, Gorilla Sessions, robfig/cron/v3.
-* **Distributed Engine**: Valkey, Apache Kafka (segmentio/kafka-go).
-* **Storage**: PostgreSQL.
-* **Integrations**: Google Calendar API v3.
+```
+[contestSync]
+├── cmd
+│   ├── server  ───────── API Server Binary (Routing, Rate limits, Session stores)
+│   └── worker  ───────── Background Workflows Executor & Micro-Health Web Server
+├── config  ───────────── Unified Config Engine & Environment Gating Layer
+├── internal
+│   ├── api  ──────────── HTTP Handlers, Admin routes, Security Middlewares, Asset Minifier
+│   ├── auth  ─────────── Cryptographic AES-256-GCM Encryption/Decryption Modules
+│   ├── db  ───────────── Database Initializer, Pool Splits, Replica Round-Robin counters
+│   ├── extractor  ────── Platform-Specific HTML/JSON Fetchers & Active Parsers
+│   ├── queue  ────────── Distributed Kafka / Local Fallback Queue Broker
+│   ├── observability  ── Asynchronous Telegram Warnings and Error Diagnostics Telemetry
+│   ├── scheduler  ────── robfig/cron background trigger orchestration
+│   └── sync  ─────────── Synchronization Engine & Deterministic Google Calendar Sync
+├── migrations  ───────── Database Initialization Schema Definitions
+├── models  ───────────── Global Struct Definitions, Key Formatter & Cache constants
+└── web  ──────────────── Frontend HTML, GSAP Animations, Lenis, and Custom CSS
+```
 
 ---
 
-## Configuration & Getting Started
+## Detailed Environment Configurations
 
-### 1. Environment Configurations
+| Environment Variable | Description | Default Value | Example Value |
+| :--- | :--- | :--- | :--- |
+| `POSTGRES_DB` | Connection URL for Primary Write Postgres Database | None (Required) | `postgres://user:pass@host:port/db?sslmode=require` |
+| `POSTGRES_READ_DB` | Comma-separated Connection URLs for Read Replica Databases | None | `postgres://user:pass@rep1:port/db,postgres://user:pass@rep2:port/db` |
+| `CONNECTION_LIMIT` | Maximum connections allowed in Primary Write pool | `800` | `20` |
+| `CONNECTION_POOL_LIMIT`| Maximum connections allowed per Read Replica Pool | `10000` | `100` |
+| `VALKEY_URI` | Connection URI string for Valkey instance | None | `rediss://default:password@host:port` |
+| `GOOGLE_CLIENT_ID` | OAuth 2.0 Web Application Client ID from Google Cloud Console | None | `abc-123.apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_SECRET` | OAuth 2.0 Web Application Client Secret from Google Cloud Console | None | `sec_code_xyz` |
+| `GOOGLE_REDIRECT_URL` | Redirect Callback URL registered in Google API credentials | None | `http://localhost:8080/auth/google/callback` |
+| `SESSION_SECRET` | 32-byte hex-encoded key for Gorilla Cookie / Valkey Sessions | None | `d3b07384d113edec49eaa6238ad5ff00` |
+| `ENCRYPTION_KEY` | 32-byte hex-encoded key for AES Refresh Token encryption | None | `2d9bb20065718dfdc0237af8ad3ff49a` |
+| `ADMIN_PASSWORD` | Standard password for admin panel authentication | None | `adm_pwd_secure` |
+| `TRUST_PROXY` | Gated verification trust toggle for client IP forwarding | `false` | `true` |
+| `KAFKA_HOST` | Host Address of Apache Kafka broker | None | `kafka.service.consul` |
+| `KAFKA_PORT` | Port number of Apache Kafka broker | `9092` | `9094` |
+| `KAFKA_PARTITIONS` | Dynamic partition count generated for topics | `2` | `4` |
+| `KAFKA_REPLICATION_FACTOR`| Dynamic replication count set on topic creation | `1` | `2` |
+| `TELEGRAM_PROXY_URL` | Outbound Proxy target for forwarding warnings/errors | None | `https://tg-proxy.myorg.workers.dev` |
+| `PROXY_SECRET_KEY` | Token key for proxy HTTP authorization | None | `sec_key_abc` |
+| `TELEGRAM_GROUP_ID` | Group Identifier target for slog alerts | None | `-1002938475` |
+| `TELEGRAM_GROUP_TOPIC_ID`| Topic Thread ID inside Telemetry Group | None | `12` |
+| `FROM_ENV` | Application node identifier string for diagnostics | None | `Server-Node-Staging` |
+| `PORT` | API Web Server HTTP listener port | `8080` | `7860` |
+| `WORKER_PORT` | Background Worker Micro-Health server HTTP port | `8081` | `8082` |
+| `ENV` | System execution environment gating flag | `production` | `development` |
 
-Define these environment settings in a `.env` file at the root:
+---
 
-```env
-POSTGRES_DB=postgres://user:pass@host:port/db?sslmode=require
-CONNECTION_LIMIT=10
-GOOGLE_CLIENT_ID=your_id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your_secret
-GOOGLE_REDIRECT_URL=http://localhost:8080/auth/google/callback
-SESSION_SECRET=your_32_byte_hex_secret
-ENCRYPTION_KEY=your_32_byte_hex_secret
-PORT=8080
-ENV=development
-ALLOWED_ORIGIN=http://localhost:8080
-ADMIN_PASSWORD=your_admin_pass
-KAFKA_HOST=kafka_broker_host
-KAFKA_PORT=9092
-KAFKA_PARTITIONS=4
-VALKEY_URI=rediss://default:password@host:port
-```
+## Execution and Compilation
 
-### 2. Execution and Compilation
-
-#### Compile and Start API Server Locally
+### Compile and Start API Server Locally
 
 ```powershell
 $env:CGO_ENABLED=0; $env:GOOS="windows"; $env:GOARCH="amd64"; $env:GOAMD64="v3"; go build -tags "netgo osusergo" -trimpath -buildvcs=false -ldflags="-s -w -extldflags -static" -o server.exe ./cmd/server/main.go 2>&1
 ./server.exe
 ```
 
-#### Compile and Start Background Worker Locally
+### Compile and Start Background Worker Locally
 
 ```powershell
 $env:CGO_ENABLED=0; $env:GOOS="windows"; $env:GOARCH="amd64"; $env:GOAMD64="v3"; go build -tags "netgo osusergo" -trimpath -buildvcs=false -ldflags="-s -w -extldflags -static" -o worker.exe ./cmd/worker/main.go 2>&1
 ./worker.exe
 ```
 
-#### Multi-Service Containerized Deployment
+### Multi-Service Containerized Deployment
 
-To compile images manually:
+To build Docker images manually:
 
 ```powershell
 docker build -f Dockerfile.server -t contestsync-server .
