@@ -87,8 +87,8 @@
           >
             <p>
               At ContestSync, we take your privacy seriously. This policy
-              describes how we collect, protect, and handle your data when you
-              use our sync tool.
+              describes how we collect, protect, use, and handle your data when you
+              use our synchronization tool, particularly concerning Google API Services.
             </p>
 
             <h2
@@ -103,8 +103,8 @@
               1. Information We Collect
             </h2>
             <p>
-              We only collect the absolute minimum required to perform the
-              synchronization service:
+              We collect the absolute minimum required to perform the
+              synchronization service. Specifically, when you sign in with Google, we collect:
             </p>
             <ul
               style="
@@ -115,15 +115,13 @@
               "
             >
               <li>
-                Your Google Account email address (to identify you and manage
-                your session).
+                <strong>Google Account Information:</strong> Your email address and basic profile information (to uniquely identify you and manage your session).
               </li>
               <li>
-                Google Calendar OAuth refresh tokens (encrypted using AES-256)
-                to write and update contest events on your calendar.
+                <strong>Google Calendar Access:</strong> OAuth access and refresh tokens. We request scopes strictly necessary for calendar management.
               </li>
               <li>
-                Your platform sync preferences (e.g., LeetCode, Codeforces).
+                <strong>Sync Preferences:</strong> Your selected platform preferences (e.g., LeetCode, Codeforces) and synchronization timestamps.
               </li>
             </ul>
 
@@ -136,13 +134,28 @@
                 font-weight: 800;
               "
             >
-              2. How We Protect Your Data
+              2. How We Use Your Data
             </h2>
             <p>
-              All sensitive credentials (including OAuth refresh tokens) are
-              encrypted in transit and at rest using AES-256 with key
-              versioning. We do not store your Google password, and we only
-              request scopes strictly necessary for calendar management.
+              The data we collect is used <strong>exclusively</strong> for providing the ContestSync service:
+            </p>
+            <ul
+              style="
+                padding-left: 1.5rem;
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+              "
+            >
+              <li>
+                To create, read, update, and delete competitive programming contest events on a dedicated calendar within your Google Calendar account.
+              </li>
+              <li>
+                To authenticate your session securely when you access your preferences dashboard.
+              </li>
+            </ul>
+            <p>
+              ContestSync's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer" style="color: var(--accent-cyan); text-decoration: underline;">Google API Services User Data Policy</a>, including the Limited Use requirements.
             </p>
 
             <h2
@@ -154,12 +167,26 @@
                 font-weight: 800;
               "
             >
-              3. Data Deletion & Autonomy
+              3. How We Protect Your Data
             </h2>
             <p>
-              We believe you should have total control over your data. A
-              permanent account deletion feature is built directly into our
-              platform:
+              All sensitive credentials, including your Google OAuth refresh tokens, are
+              strongly encrypted in transit (via HTTPS/TLS) and at rest in our secure database using AES-256 encryption. We never see or store your Google password. 
+            </p>
+
+            <h2
+              style="
+                font-size: var(--t-h3);
+                color: var(--text-primary);
+                margin-top: 1rem;
+                font-family: &quot;Syne&quot;, sans-serif;
+                font-weight: 800;
+              "
+            >
+              4. Data Retention and Deletion
+            </h2>
+            <p>
+              We retain your data only for as long as you maintain an active account with us. You have total control over your data:
             </p>
             <ul
               style="
@@ -170,14 +197,12 @@
               "
             >
               <li>
-                You can delete your account at any time via the button in your
-                preferences dashboard.
+                You can permanently delete your account at any time via the "Delete Account" button in your preferences dashboard.
               </li>
               <li>
-                Upon request, our system immediately revokes your Google OAuth
-                refresh token, permanently deletes all user database records,
-                and initiates a clean-up task to delete all synced ContestSync
-                calendar events from your Google Calendar.
+                Upon deletion, our system automatically and immediately revokes your Google OAuth
+                refresh token with Google, permanently deletes all your records from our database (including email, preferences, and encrypted tokens), 
+                and removes all synced ContestSync events from your Google Calendar.
               </li>
             </ul>
 
@@ -190,12 +215,10 @@
                 font-weight: 800;
               "
             >
-              4. Third-Party Sharing
+              5. Third-Party Sharing (No Sharing Policy)
             </h2>
             <p>
-              We do not sell, trade, or share your personal data with any third
-              parties. All schedule lookups are done directly against the
-              platforms or our clean public cache.
+              We <strong>do not</strong> sell, trade, or share your personal data, including your Google user data and calendar events, with any third parties or advertisers. We do not use your data for advertising purposes. All schedule lookups are done directly against the competitive programming platforms or our own public cache.
             </p>
           </div>
         </div>
