@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/0xarchit/contestsync/internal/auth"
@@ -530,11 +531,10 @@ func verifyHCaptcha(ctx context.Context, responseToken string) (bool, error) {
 		"response": {responseToken},
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://hcaptcha.com/siteverify", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://hcaptcha.com/siteverify", strings.NewReader(form.Encode()))
 	if err != nil {
 		return false, err
 	}
-	req.PostForm = form
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := client.Do(req)
 	if err != nil {
