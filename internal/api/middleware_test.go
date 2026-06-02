@@ -60,13 +60,13 @@ func TestRequireAuth(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
-	
+
 	session, _ := store.Get(req, "session")
 	session.Values["user_id"] = 123
-	
+
 	w2 := httptest.NewRecorder()
 	session.Save(req, w2)
-	
+
 	for k, v := range w2.Header() {
 		req.Header[k] = v
 	}
@@ -102,10 +102,10 @@ func TestCSRFMiddleware(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/test", nil)
 	req.Header.Set("X-CSRF-Token", "valid-token")
-	
+
 	session, _ := store.Get(req, "session")
 	session.Values["csrf_token"] = "valid-token"
-	
+
 	w2 := httptest.NewRecorder()
 	session.Save(req, w2)
 	for k, v := range w2.Header() {
@@ -131,7 +131,7 @@ func TestCSRFMiddlewareForbidden(t *testing.T) {
 
 	session, _ := store.Get(req, "session")
 	session.Values["csrf_token"] = "valid-token"
-	
+
 	w2 := httptest.NewRecorder()
 	session.Save(req, w2)
 	for k, v := range w2.Header() {
