@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"sync/atomic"
 
@@ -11,9 +12,9 @@ import (
 )
 
 type Pool struct {
-	write    *pgxpool.Pool
-	reads    []*pgxpool.Pool
-	readIdx  atomic.Uint64
+	write   *pgxpool.Pool
+	reads   []*pgxpool.Pool
+	readIdx atomic.Uint64
 }
 
 func (p *Pool) WriteDB() *pgxpool.Pool {
@@ -59,12 +60,12 @@ func Init(ctx context.Context, writeURL string, readURLsRaw string, writeLimit i
 	}
 
 	writeConns := int32(10)
-	if writeLimit > 0 {
+	if writeLimit > 0 && writeLimit <= math.MaxInt32 {
 		writeConns = int32(writeLimit)
 	}
 
 	readConns := int32(100)
-	if poolLimit > 0 {
+	if poolLimit > 0 && poolLimit <= math.MaxInt32 {
 		readConns = int32(poolLimit)
 	}
 
