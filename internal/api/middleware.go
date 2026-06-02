@@ -224,7 +224,7 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 func SecurityHeadersMiddleware(env string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com; style-src 'self' https://fonts.googleapis.com https://unpkg.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.github.com https://unpkg.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';")
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://unpkg.com https://hcaptcha.com https://*.hcaptcha.com; style-src 'self' https://fonts.googleapis.com https://unpkg.com https://hcaptcha.com https://*.hcaptcha.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com data: https://hcaptcha.com https://*.hcaptcha.com; img-src 'self' data: https: https://hcaptcha.com https://*.hcaptcha.com; connect-src 'self' https://api.github.com https://unpkg.com https://hcaptcha.com https://*.hcaptcha.com; frame-src 'self' https://hcaptcha.com https://*.hcaptcha.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';")
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("X-XSS-Protection", "0")
