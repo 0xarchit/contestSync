@@ -1178,6 +1178,15 @@ section {
   min-height: 100vh;
   padding: 2rem;
 }
+.back-home-link {
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.back-home-link:hover {
+  color: var(--text-primary);
+}
+
 .pref-card {
   background: var(--bg-surface);
   border: 1px solid var(--bg-border);

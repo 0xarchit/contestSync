@@ -238,7 +238,7 @@ function initApp() {
     .then((res) => {
       if (res.ok) {
         document.querySelectorAll('a[href="/auth/google"]').forEach((btn) => {
-          btn.href = "preferences.html";
+          btn.href = "preferences";
           btn.innerHTML =
             'Go to Preferences <svg class="icon-ext" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
         });
@@ -353,24 +353,24 @@ async function initPreferences() {
                 if (syncRes && syncRes.status === "rate_limited") {
                   showSuccess(
                     "Preferences updated! Sync is rate-limited.",
-                    "Since you synced recently, your new choices will be automatically updated on the next hourly schedule."
+                    "Since you synced recently, your new choices will be automatically updated on the next hourly schedule.",
                   );
                 } else {
                   showSuccess(
                     "Preferences saved and sync queued!",
-                    "Your calendar is being updated with the new platform selections."
+                    "Your calendar is being updated with the new platform selections.",
                   );
                 }
               } catch (syncErr) {
                 showSuccess(
                   "Preferences saved successfully.",
-                  "Calendar updates will apply automatically on the next scheduled run."
+                  "Calendar updates will apply automatically on the next scheduled run.",
                 );
               }
             } else {
               showSuccess(
                 "Preferences saved!",
-                "Your selections are already up to date. No new sync required."
+                "Your selections are already up to date. No new sync required.",
               );
             }
           }
@@ -442,7 +442,9 @@ function showSuccess(message, subMessage) {
   if (!card) return;
 
   let mainMsg = message || "Your sync request has been added to the queue.";
-  let subMsg = subMessage || "Contests will appear in your Google Calendar within a few minutes.";
+  let subMsg =
+    subMessage ||
+    "Contests will appear in your Google Calendar within a few minutes.";
 
   gsap.to(card, {
     opacity: 0,
@@ -507,7 +509,7 @@ function showToast(message, type = "success") {
   gsap.fromTo(
     toast,
     { opacity: 0, y: 20, scale: 0.9 },
-    { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power3.out" }
+    { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power3.out" },
   );
 
   setTimeout(() => {

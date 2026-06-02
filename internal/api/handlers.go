@@ -232,7 +232,7 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to queue initial sync", "user_id", userID, "error", err)
 	}
 
-	http.Redirect(w, r, "/preferences.html", http.StatusSeeOther)
+	http.Redirect(w, r, "/preferences", http.StatusSeeOther)
 }
 
 func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
