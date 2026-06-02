@@ -323,6 +323,14 @@ async function initPreferences() {
         submitBtn.disabled = true;
         submitBtn.textContent = "Syncing...";
 
+        let captchaResponse = hcaptcha.getResponse();
+        if (!captchaResponse) {
+          showToast("Please complete the CAPTCHA challenge.", "error");
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Start Sync";
+          return;
+        }
+
         let selected = Array.from(
           document.querySelectorAll('input[name="platform"]:checked'),
         ).map((i) => i.value);
@@ -335,7 +343,9 @@ async function initPreferences() {
           let res = await securePost("/preferences", {
             platforms: selected,
             use_dedicated: useDedicated,
+            "h-captcha-response": captchaResponse,
           });
+          hcaptcha.reset();
           if (res) {
             if (res.changed) {
               try {
@@ -365,7 +375,8 @@ async function initPreferences() {
             }
           }
         } catch (err) {
-          console.error("Pref: save failed", err);
+          hcaptcha.reset();
+          showToast(err.message || "An error occurred.", "error");
           submitBtn.disabled = false;
           submitBtn.textContent = "Start Sync";
         }

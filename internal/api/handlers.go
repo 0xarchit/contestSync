@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/0xarchit/contestsync/internal/auth"
@@ -18,8 +20,8 @@ import (
 	"github.com/0xarchit/contestsync/models"
 	"github.com/gorilla/sessions"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/oauth2"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/oauth2"
 )
 
 type Handlers struct {
@@ -384,13 +386,27 @@ func (h *Handlers) GetPlatforms(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(ContextKeyUserID).(int)
 	var req struct {
-		Platforms    []string `json:"platforms"`
-		UseDedicated bool     `json:"use_dedicated"`
+		Platforms       []string `json:"platforms"`
+		UseDedicated    bool     `json:"use_dedicated"`
+		CaptchaResponse string   `json:"h-captcha-response"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
 		return
+	}
+
+	secret := os.Getenv("HCAPTCHA_SECRET")
+	if secret != "" {
+		if req.CaptchaResponse == "" {
+			http.Error(w, `{"error":"captcha verification required"}`, http.StatusBadRequest)
+			return
+		}
+		valid, err := verifyHCaptcha(r.Context(), req.CaptchaResponse)
+		if err != nil || !valid {
+			http.Error(w, `{"error":"captcha verification failed"}`, http.StatusForbidden)
+			return
+		}
 	}
 
 	allowed := make(map[string]bool)
@@ -502,4 +518,38 @@ func generateRandomString(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func verifyHCaptcha(ctx context.Context, responseToken string) (bool, error) {
+	secret := os.Getenv("HCAPTCHA_SECRET")
+	if secret == "" {
+		return true, nil
+	}
+	form := url.Values{
+		"secret":   {secret},
+		"response": {responseToken},
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://hcaptcha.com/siteverify", nil)
+	if err != nil {
+		return false, err
+	}
+	req.PostForm = form
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+	var res struct {
+		Success bool `json:"success"`
+	}
+	if err := json.Unmarshal(body, &res); err != nil {
+		return false, err
+	}
+	return res.Success, nil
 }

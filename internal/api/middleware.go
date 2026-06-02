@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -80,6 +81,57 @@ func (rl *rateLimiter) limit(ip string, max int, duration time.Duration) bool {
 	return true
 }
 
+type VelocityCounter struct {
+	hits      int64
+	resetTime time.Time
+}
+
+type EarlyRateLimiter struct {
+	mu       sync.RWMutex
+	counters map[string]*VelocityCounter
+}
+
+func NewEarlyRateLimiter() *EarlyRateLimiter {
+	return &EarlyRateLimiter{
+		counters: make(map[string]*VelocityCounter),
+	}
+}
+
+func (el *EarlyRateLimiter) Allow(ip string, limit int64, duration time.Duration) bool {
+	el.mu.RLock()
+	counter, ok := el.counters[ip]
+	el.mu.RUnlock()
+	now := time.Now()
+	if !ok {
+		el.mu.Lock()
+		counter, ok = el.counters[ip]
+		if !ok {
+			counter = &VelocityCounter{
+				hits:      1,
+				resetTime: now.Add(duration),
+			}
+			el.counters[ip] = counter
+			el.mu.Unlock()
+			return true
+		}
+		el.mu.Unlock()
+	}
+	if now.After(counter.resetTime) {
+		el.mu.Lock()
+		if now.After(counter.resetTime) {
+			counter.hits = 1
+			counter.resetTime = now.Add(duration)
+		} else {
+			atomic.AddInt64(&counter.hits, 1)
+		}
+		el.mu.Unlock()
+		return true
+	}
+	val := atomic.AddInt64(&counter.hits, 1)
+	return val <= limit
+}
+
+var earlyLimiter = NewEarlyRateLimiter()
 var globalLimiter = &rateLimiter{cap: 10000}
 
 func getClientIP(r *http.Request) string {
@@ -110,6 +162,12 @@ func RateLimitMiddleware(valkeyClient *redis.Client, max int, duration time.Dura
 			ip := getClientIP(r)
 
 			retryAfter := strconv.Itoa(int(duration.Seconds()))
+
+			if !earlyLimiter.Allow(ip, 150, 10*time.Second) {
+				w.Header().Set("Retry-After", "60")
+				http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+				return
+			}
 
 			if valkeyClient != nil {
 				key := "ratelimit:" + ip
