@@ -163,8 +163,11 @@ func main() {
 	r.Get("/auth/google", handlers.GoogleLogin)
 	r.Get("/auth/google/callback", handlers.GoogleCallback)
 
-	r.Post("/admin/update", adminHandlers.UpdateContests)
-	r.Post("/admin/sync", adminHandlers.SyncAll)
+	r.Group(func(r chi.Router) {
+		r.Use(api.RateLimitMiddleware(valkeyClient, 10, 15*time.Minute))
+		r.Post("/admin/update", adminHandlers.UpdateContests)
+		r.Post("/admin/sync", adminHandlers.SyncAll)
+	})
 
 	r.Group(func(r chi.Router) {
 		r.Use(api.RequireAuth(sessionStore))
