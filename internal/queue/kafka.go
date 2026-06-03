@@ -461,6 +461,27 @@ func (q *Queue) handleExtraction(ctx context.Context, platform string) {
 			slog.Error("failed to invalidate valkey cache", "platform", platform, "error", err)
 		}
 	}
+
+	q.logDatabaseContestsTelemetry(ctx)
+}
+
+func (q *Queue) logDatabaseContestsTelemetry(ctx context.Context) {
+	rows, err := q.DB.Query(ctx, "SELECT platform, COUNT(*) FROM contests WHERE start_time > NOW() GROUP BY platform")
+	if err != nil {
+		slog.Error("failed to query contest counts telemetry", "error", err)
+		return
+	}
+	defer rows.Close()
+
+	var platformCounts []any
+	for rows.Next() {
+		var plat string
+		var count int
+		if err := rows.Scan(&plat, &count); err == nil {
+			platformCounts = append(platformCounts, plat, count)
+		}
+	}
+	slog.Info("database contest metrics updated", platformCounts...)
 }
 
 func (q *Queue) Close() error {

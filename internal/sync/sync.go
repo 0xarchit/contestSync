@@ -133,7 +133,10 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 
 	cal, err := srv.Calendars.Get("primary").Do()
 	if err != nil {
-		return err
+		deleted, syncErr := s.handleSyncError(ctx, userID, err)
+		if deleted || syncErr != nil {
+			return syncErr
+		}
 	}
 	timezone := "UTC"
 	if cal.TimeZone != "" {
@@ -294,7 +297,7 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 			continue
 		}
 
-		detID := GenerateDeterministicEventID(userID, c.ID)
+		detID := GenerateDeterministicEventID(user.GoogleID, c.ID)
 
 		event := &calendar.Event{
 			Id:          detID,
@@ -367,8 +370,25 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 	return nil
 }
 
-func GenerateDeterministicEventID(userID int, contestID string) string {
+func GenerateDeterministicEventID(googleID string, contestID string) string {
 	hasher := md5.New()
-	hasher.Write([]byte(fmt.Sprintf("%d_%s", userID, contestID)))
+	hasher.Write([]byte(fmt.Sprintf("%s_%s", googleID, contestID)))
 	return strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(hasher.Sum(nil)))
+}
+
+func (s *Syncer) handleSyncError(ctx context.Context, userID int, err error) (bool, error) {
+	if err == nil {
+		return false, nil
+	}
+	errStr := err.Error()
+	if strings.Contains(errStr, "invalid_grant") || strings.Contains(errStr, "Token has been expired or revoked") {
+		slog.Warn("user google oauth token has been revoked or expired, deleting account data", "user_id", userID)
+		s.DB.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+		if s.Valkey != nil {
+			cacheKey := models.UserCacheKey(userID)
+			s.Valkey.Del(ctx, cacheKey)
+		}
+		return true, nil
+	}
+	return false, err
 }
