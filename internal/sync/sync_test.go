@@ -1,6 +1,8 @@
 package sync
 
 import (
+	"context"
+	"fmt"
 	"regexp"
 	"testing"
 )
@@ -32,5 +34,35 @@ func TestGenerateDeterministicEventID(t *testing.T) {
 	}
 	if !matched {
 		t.Errorf("expected base32hex compatible lowercase format, got %q", id1)
+	}
+}
+
+func TestHandleSyncError(t *testing.T) {
+	s := &Syncer{}
+
+	deleted, err := s.handleSyncError(context.Background(), 1, nil)
+	if deleted {
+		t.Error("expected deleted to be false for nil error")
+	}
+	if err != nil {
+		t.Errorf("expected err to be nil for nil error, got %v", err)
+	}
+
+	invalidGrantErr := fmt.Errorf("oauth2: cannot fetch token: 400 Bad Request\nResponse: {\"error\":\"invalid_grant\",\"error_description\":\"Token has been expired or revoked.\"}")
+	deleted, err = s.handleSyncError(context.Background(), 1, invalidGrantErr)
+	if !deleted {
+		t.Error("expected deleted to be true for invalid_grant error")
+	}
+	if err != nil {
+		t.Errorf("expected err to be nil for invalid_grant error, got %v", err)
+	}
+
+	otherErr := fmt.Errorf("connection timeout")
+	deleted, err = s.handleSyncError(context.Background(), 1, otherErr)
+	if deleted {
+		t.Error("expected deleted to be false for non-oauth error")
+	}
+	if err == nil || err.Error() != "connection timeout" {
+		t.Errorf("expected connection timeout error, got %v", err)
 	}
 }

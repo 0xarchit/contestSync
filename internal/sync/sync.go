@@ -133,10 +133,10 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 
 	cal, err := srv.Calendars.Get("primary").Do()
 	if err != nil {
-		deleted, syncErr := s.handleSyncError(ctx, userID, err)
-		if deleted || syncErr != nil {
-			return syncErr
+		if deleted, _ := s.handleSyncError(ctx, userID, err); deleted {
+			return nil
 		}
+		return fmt.Errorf("failed to fetch primary calendar: %w", err)
 	}
 	timezone := "UTC"
 	if cal.TimeZone != "" {
@@ -153,7 +153,12 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 				TimeZone: timezone,
 			}
 			createdCal, err := srv.Calendars.Insert(newCal).Context(ctx).Do()
-			if err == nil {
+			if err != nil {
+				if deleted, syncErr := s.handleSyncError(ctx, userID, err); deleted {
+					return syncErr
+				}
+				slog.Error("failed to create dedicated calendar", "user_id", userID, "error", err)
+			} else {
 				user.CalendarID = createdCal.Id
 				s.DB.Exec(ctx, "UPDATE users SET calendar_id = $1 WHERE id = $2", createdCal.Id, userID)
 				if s.Valkey != nil {
@@ -162,8 +167,6 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 						slog.Error("failed to invalidate user cache after calendar creation", "user_id", userID, "error", err)
 					}
 				}
-			} else {
-				slog.Error("failed to create dedicated calendar", "user_id", userID, "error", err)
 			}
 		}
 	}
@@ -333,6 +336,9 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 			if gErr, ok := err.(*googleapi.Error); ok && gErr.Code == http.StatusConflict {
 				break
 			}
+			if deleted, _ := s.handleSyncError(ctx, userID, err); deleted {
+				return nil
+			}
 			if attempt < 3 {
 				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
 			}
@@ -347,6 +353,9 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 					anySynced = true
 				}
 				continue
+			}
+			if deleted, syncErr := s.handleSyncError(ctx, userID, err); deleted {
+				return syncErr
 			}
 			slog.Error("failed to insert event", "user_id", userID, "contest_id", c.ID, "error", err)
 			continue
@@ -383,7 +392,9 @@ func (s *Syncer) handleSyncError(ctx context.Context, userID int, err error) (bo
 	errStr := err.Error()
 	if strings.Contains(errStr, "invalid_grant") || strings.Contains(errStr, "Token has been expired or revoked") {
 		slog.Warn("user google oauth token has been revoked or expired, deleting account data", "user_id", userID)
-		s.DB.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+		if s.DB != nil {
+			s.DB.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+		}
 		if s.Valkey != nil {
 			cacheKey := models.UserCacheKey(userID)
 			s.Valkey.Del(ctx, cacheKey)
