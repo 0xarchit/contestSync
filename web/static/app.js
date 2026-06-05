@@ -383,36 +383,16 @@ async function initPreferences() {
       });
     }
 
-    if (card) {
-      let delContainer = document.createElement("div");
-      delContainer.className = "dedicated-option";
-      delContainer.style.cssText = "margin-top: 2rem; display: flex; flex-direction: column; gap: 0.5rem;";
-
-      let delLabel = document.createElement("label");
-      delLabel.className = "platform-item";
-      delLabel.style.cssText = "width: 100%; cursor: pointer;";
-      delLabel.innerHTML = `
-        <input type="checkbox" id="delete-google-data" />
-        <span class="custom-checkbox"></span>
-        <span style="font-size: 0.85rem; color: var(--text-dim);"
-          >Delete ContestSync calendar/events from Google Calendar</span
-        >
-      `;
-      delContainer.appendChild(delLabel);
-
-      let delBtn = document.createElement("button");
-      delBtn.className = "btn btn-ghost";
-      delBtn.style.cssText =
-        "width:100%; justify-content:center; color:var(--text-dim); font-size:var(--t-label); margin-top: 0.5rem;";
-      delBtn.textContent = "Remove Account & Data";
+    let delBtn = document.getElementById("delete-account-btn");
+    if (delBtn) {
       delBtn.addEventListener("click", async () => {
-        if (
-          confirm(
-            "Are you sure? This will remove all your data and stop calendar syncing.",
-          )
-        ) {
+        const deleteGoogleData = !!document.getElementById("delete-google-data")?.checked;
+        let confirmMsg = "Are you sure? This will remove all your data and stop calendar syncing.";
+        if (deleteGoogleData) {
+          confirmMsg += "\n\nThis will ALSO delete your ContestSync calendar and all synced events from your Google Calendar, and revoke app access permanently.";
+        }
+        if (confirm(confirmMsg)) {
           try {
-            const deleteGoogleData = !!document.getElementById("delete-google-data")?.checked;
             const res = await fetch(`/account?delete_google_data=${deleteGoogleData}`, {
               method: "DELETE",
               headers: { "X-CSRF-Token": getCSRFToken() },
@@ -420,14 +400,15 @@ async function initPreferences() {
             });
             if (res.ok) {
               window.location.href = "/";
+            } else {
+              const data = await res.json().catch(() => ({}));
+              alert(`Failed to delete account: ${data.error || res.statusText}`);
             }
           } catch (err) {
             console.error("Delete failed", err);
           }
         }
       });
-      delContainer.appendChild(delBtn);
-      card.appendChild(delContainer);
     }
   } catch (e) {
     console.error("Pref: platforms fetch failed", e);

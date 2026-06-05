@@ -127,6 +127,41 @@
             </p>
           </div>
         </form>
+        <div style="margin-top: 2rem; border-top: 1px solid var(--bg-border); padding-top: 1.5rem;">
+          <div
+            class="delete-google-option"
+            style="
+              display: flex;
+              align-items: center;
+              gap: 0.75rem;
+            "
+          >
+            <label class="platform-item" style="width: 100%; cursor: pointer;">
+              <input type="checkbox" id="delete-google-data" />
+              <span class="custom-checkbox"></span>
+              <span style="font-size: 0.9rem; color: var(--text-primary)">
+                Also delete my ContestSync calendar and synced events from Google Calendar
+              </span>
+            </label>
+          </div>
+          <p
+            style="
+              font-size: 0.75rem;
+              color: var(--text-dim);
+              margin-top: 0.5rem;
+              margin-left: 2.5rem;
+            "
+          >
+            If checked, this will permanently remove your dedicated "ContestSync" calendar (or all synced events from your primary calendar) and revoke app access.
+          </p>
+          <button
+            id="delete-account-btn"
+            class="btn btn-ghost"
+            style="width: 100%; justify-content: center; margin-top: 1rem; color: var(--text-dim); font-size: var(--t-label);"
+          >
+            Remove Account & Data
+          </button>
+        </div>
       </div>
     </div>
   </body>
