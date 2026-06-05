@@ -279,3 +279,19 @@ jobs:
             echo "Worker Deployment failed. Status: $WORKER_FINAL_STATUS"
             exit 1
           fi
+
+  purge-cache:
+    name: Purge Cloudflare Cache
+    needs: [deploy-server, deploy-worker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Purge Cache
+        env:
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID || vars.CF_ZONE_ID }}
+          CF_TOKEN: ${{ secrets.CF_TOKEN || vars.CF_TOKEN }}
+        run: |
+          curl -f -X POST \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"tags": ["contestsync"]}'
