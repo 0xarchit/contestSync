@@ -23,6 +23,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/oauth2"
+	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/option"
 )
 
 type Handlers struct {
@@ -312,11 +314,44 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(ContextKeyUserID).(int)
 
+	deleteGoogleData := r.URL.Query().Get("delete_google_data") == "true"
+
+	var calendarID string
 	var encryptedRefreshToken string
-	err := h.DB.QueryRow(r.Context(), "SELECT refresh_token FROM users WHERE id = $1", userID).Scan(&encryptedRefreshToken)
+	err := h.DB.QueryRow(r.Context(), "SELECT calendar_id, refresh_token FROM users WHERE id = $1", userID).Scan(&calendarID, &encryptedRefreshToken)
+
+	var eventIDs []string
+	if err == nil && deleteGoogleData {
+		rows, qErr := h.DB.Query(r.Context(), "SELECT se.google_event_id FROM synced_events se JOIN contests c ON se.contest_id = c.id WHERE se.user_id = $1 AND c.start_time > NOW()", userID)
+		if qErr == nil {
+			for rows.Next() {
+				var eid string
+				if scanErr := rows.Scan(&eid); scanErr == nil {
+					eventIDs = append(eventIDs, eid)
+				}
+			}
+			rows.Close()
+		}
+	}
+
 	if err == nil && encryptedRefreshToken != "" {
 		if refreshToken, decryptErr := auth.DecryptToken(encryptedRefreshToken, h.SessionSecret); decryptErr == nil && refreshToken != "" {
 			go func() {
+				ctx := context.Background()
+				if deleteGoogleData {
+					tokenSource := h.AuthProvider.Config.TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken})
+					srv, srvErr := calendar.NewService(ctx, option.WithTokenSource(tokenSource))
+					if srvErr == nil {
+						if calendarID != "" && calendarID != "primary" {
+							_ = srv.Calendars.Delete(calendarID).Context(ctx).Do()
+						} else if len(eventIDs) > 0 {
+							for _, eid := range eventIDs {
+								_ = srv.Events.Delete("primary", eid).Context(ctx).Do()
+								time.Sleep(50 * time.Millisecond)
+							}
+						}
+					}
+				}
 				resp, postErr := http.PostForm("https://oauth2.googleapis.com/revoke", url.Values{"token": {refreshToken}})
 				if postErr == nil {
 					resp.Body.Close()
@@ -341,7 +376,6 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Clear session
 	session, _ := h.SessionStore.Get(r, "session")
 	session.Options.MaxAge = -1
 	session.Save(r, w)

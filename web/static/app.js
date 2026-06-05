@@ -384,10 +384,26 @@ async function initPreferences() {
     }
 
     if (card) {
+      let delContainer = document.createElement("div");
+      delContainer.className = "dedicated-option";
+      delContainer.style.cssText = "margin-top: 2rem; display: flex; flex-direction: column; gap: 0.5rem;";
+
+      let delLabel = document.createElement("label");
+      delLabel.className = "platform-item";
+      delLabel.style.cssText = "width: 100%; cursor: pointer;";
+      delLabel.innerHTML = `
+        <input type="checkbox" id="delete-google-data" />
+        <span class="custom-checkbox"></span>
+        <span style="font-size: 0.85rem; color: var(--text-dim);"
+          >Delete ContestSync calendar/events from Google Calendar</span
+        >
+      `;
+      delContainer.appendChild(delLabel);
+
       let delBtn = document.createElement("button");
       delBtn.className = "btn btn-ghost";
       delBtn.style.cssText =
-        "width:100%; justify-content:center; margin-top:1rem; color:var(--text-dim); font-size:var(--t-label);";
+        "width:100%; justify-content:center; color:var(--text-dim); font-size:var(--t-label); margin-top: 0.5rem;";
       delBtn.textContent = "Remove Account & Data";
       delBtn.addEventListener("click", async () => {
         if (
@@ -396,7 +412,8 @@ async function initPreferences() {
           )
         ) {
           try {
-            const res = await fetch("/account", {
+            const deleteGoogleData = !!document.getElementById("delete-google-data")?.checked;
+            const res = await fetch(`/account?delete_google_data=${deleteGoogleData}`, {
               method: "DELETE",
               headers: { "X-CSRF-Token": getCSRFToken() },
               credentials: "same-origin",
@@ -409,7 +426,8 @@ async function initPreferences() {
           }
         }
       });
-      card.appendChild(delBtn);
+      delContainer.appendChild(delBtn);
+      card.appendChild(delContainer);
     }
   } catch (e) {
     console.error("Pref: platforms fetch failed", e);
