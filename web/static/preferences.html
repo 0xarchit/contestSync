@@ -17,20 +17,21 @@
       name="keywords"
       content="contest sync preferences, calendar configuration, platform settings"
     />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@700;800&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="style.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
-    <script src="https://unpkg.com/lenis@1.1.14/dist/lenis.min.js"></script>
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/syne-800.woff2" />
+    <link rel="preload" as="image" href="/icon.webp" fetchpriority="high" />
+    <link rel="preload" as="script" href="/app.bundle.js" />
+    <link rel="stylesheet" href="style.bundle.css" />
+    <link rel="preconnect" href="https://js.hcaptcha.com" crossorigin />
+    <link rel="preconnect" href="https://newassets.hcaptcha.com" crossorigin />
     <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
-    <script src="app.js" defer></script>
+    <script src="app.bundle.js" defer></script>
   </head>
   <body>
+    <div class="hc-scanlines"></div>
+    <div class="hc-vignette"></div>
+    <div class="hc-grid"></div>
+    <div class="custom-cursor"></div>
+    <div class="custom-cursor-dot"></div>
     <div class="noise-overlay"></div>
     <div class="pref-container">
       <div class="pref-card">

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 type StaticFile struct {
 	Content     []byte
+	GzipContent []byte
 	ContentType string
 	ETag        string
 }
@@ -56,8 +58,14 @@ func NewStaticServer(staticFS fs.FS) (http.Handler, error) {
 		h := sha256.New()
 		h.Write(minified)
 		etag := `"` + hex.EncodeToString(h.Sum(nil)) + `"`
+		var gzipBuf bytes.Buffer
+		gw := gzip.NewWriter(&gzipBuf)
+		if _, err := gw.Write(minified); err == nil {
+			gw.Close()
+		}
 		files[cleanPath] = StaticFile{
 			Content:     minified,
+			GzipContent: gzipBuf.Bytes(),
 			ContentType: getContentType(path, minified),
 			ETag:        etag,
 		}
@@ -92,8 +100,17 @@ func (m *MemoryFS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", file.ContentType)
 	w.Header().Set("ETag", file.ETag)
-	w.Header().Set("Cache-Control", "public, max-age=31536000, must-revalidate")
-	w.Write(file.Content)
+	if strings.HasSuffix(path, ".bundle.js") || strings.HasSuffix(path, ".bundle.css") || strings.HasSuffix(path, ".woff2") || strings.HasSuffix(path, ".webp") {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, must-revalidate")
+	}
+	if len(file.GzipContent) > 0 && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Write(file.GzipContent)
+	} else {
+		w.Write(file.Content)
+	}
 }
 
 func getContentType(path string, content []byte) string {

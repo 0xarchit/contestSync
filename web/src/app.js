@@ -1,15 +1,15 @@
+import './style.css';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import Lenis from 'lenis';
+
+gsap.registerPlugin(ScrollTrigger);
+
 let lenis;
 let csrfToken = "";
 
 function initApp() {
   console.log("ContestSync: Initializing App...");
-
-  if (typeof gsap === "undefined" || typeof ScrollTrigger === "undefined") {
-    console.error(
-      "ContestSync: GSAP or ScrollTrigger not found. UI animations disabled.",
-    );
-    return;
-  }
 
   const path = window.location.pathname;
   const isPreferencesPage = path.includes("preferences");
@@ -21,7 +21,7 @@ function initApp() {
 
   const rm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  if (!rm && typeof Lenis !== "undefined") {
+  if (!rm) {
     console.log("ContestSync: Starting Lenis...");
     lenis = new Lenis({
       duration: 1.2,
@@ -40,8 +40,6 @@ function initApp() {
       ScrollTrigger.update();
     });
   }
-
-  gsap.registerPlugin(ScrollTrigger);
 
   const heroContent = document.querySelectorAll(
     ".hero-content > *, .hero-visual",
@@ -234,17 +232,19 @@ function initApp() {
     });
   });
 
-  fetch("/me", { credentials: "same-origin" })
-    .then((res) => {
-      if (res.ok) {
-        document.querySelectorAll('a[href="/auth/google"]').forEach((btn) => {
-          btn.href = "preferences";
-          btn.innerHTML =
-            'Go to Preferences <svg class="icon-ext" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
-        });
-      }
-    })
-    .catch((err) => console.error(err));
+  if (document.cookie.includes("session=")) {
+    fetch("/me", { credentials: "same-origin" })
+      .then((res) => {
+        if (res.ok) {
+          document.querySelectorAll('a[href="/auth/google"]').forEach((btn) => {
+            btn.href = "preferences";
+            btn.innerHTML =
+              'Go to Preferences <svg class="icon-ext" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
+          });
+        }
+      })
+      .catch((err) => console.error(err));
+  }
 
   ScrollTrigger.refresh();
 }
@@ -524,23 +524,38 @@ function showToast(message, type = "success") {
 }
 
 function initGlobalInteractivity() {
-  const grid = document.createElement("div");
-  grid.className = "hc-grid";
-  const vignette = document.createElement("div");
-  vignette.className = "hc-vignette";
-  const scanlines = document.createElement("div");
-  scanlines.className = "hc-scanlines";
-  document.body.prepend(scanlines);
-  document.body.prepend(vignette);
-  document.body.prepend(grid);
+  let grid = document.querySelector(".hc-grid");
+  if (!grid) {
+    grid = document.createElement("div");
+    grid.className = "hc-grid";
+    document.body.prepend(grid);
+  }
+  let vignette = document.querySelector(".hc-vignette");
+  if (!vignette) {
+    vignette = document.createElement("div");
+    vignette.className = "hc-vignette";
+    document.body.prepend(vignette);
+  }
+  let scanlines = document.querySelector(".hc-scanlines");
+  if (!scanlines) {
+    scanlines = document.createElement("div");
+    scanlines.className = "hc-scanlines";
+    document.body.prepend(scanlines);
+  }
 
   if (window.matchMedia("(hover: hover)").matches) {
-    const cursor = document.createElement("div");
-    cursor.className = "custom-cursor";
-    const cursorDot = document.createElement("div");
-    cursorDot.className = "custom-cursor-dot";
-    document.body.appendChild(cursor);
-    document.body.appendChild(cursorDot);
+    let cursor = document.querySelector(".custom-cursor");
+    if (!cursor) {
+      cursor = document.createElement("div");
+      cursor.className = "custom-cursor";
+      document.body.appendChild(cursor);
+    }
+    let cursorDot = document.querySelector(".custom-cursor-dot");
+    if (!cursorDot) {
+      cursorDot = document.createElement("div");
+      cursorDot.className = "custom-cursor-dot";
+      document.body.appendChild(cursorDot);
+    }
 
     document.addEventListener("mousemove", (e) => {
       gsap.to(cursor, {
@@ -583,8 +598,12 @@ function initGlobalInteractivity() {
   }
 
   document.querySelectorAll(".platform-card").forEach((card) => {
+    let rect = null;
+    card.addEventListener("pointerenter", () => {
+      rect = card.getBoundingClientRect();
+    });
     card.addEventListener("mousemove", (e) => {
-      const rect = card.getBoundingClientRect();
+      if (!rect) rect = card.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       card.style.setProperty("--mx", `${x}px`);
@@ -601,6 +620,7 @@ function initGlobalInteractivity() {
     });
 
     card.addEventListener("mouseleave", () => {
+      rect = null;
       gsap.to(card, {
         rotateY: 0,
         rotateX: 0,
@@ -609,7 +629,6 @@ function initGlobalInteractivity() {
       });
     });
   });
-  fetchGitHubStars();
 }
 
 function initFAQ() {
@@ -651,16 +670,17 @@ async function fetchGitHubStars() {
   }
 }
 
-window.addEventListener("load", () => {
-  setTimeout(() => {
-    initApp();
-    initGlobalInteractivity();
-    initFAQ();
-  }, 100);
-});
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", fetchGitHubStars);
-} else {
-  fetchGitHubStars();
+function queueGitHubStars() {
+  if ("requestIdleCallback" in window) {
+    requestIdleCallback(fetchGitHubStars);
+  } else {
+    setTimeout(fetchGitHubStars, 1);
+  }
 }
+
+window.addEventListener("DOMContentLoaded", () => {
+  initApp();
+  initGlobalInteractivity();
+  initFAQ();
+  queueGitHubStars();
+});

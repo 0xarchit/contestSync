@@ -26,3 +26,5 @@ Thumbs.db
 gemini.md
 *.png
 .antigravitycli
+.opencode
+node_modules
