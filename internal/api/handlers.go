@@ -80,12 +80,12 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if lastSyncAt != nil && time.Since(*lastSyncAt) < 15*time.Minute {
+	if lastSyncAt != nil && time.Since(*lastSyncAt) < 1*time.Minute {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
 			"status":  "rate_limited",
-			"message": "Please wait 15 minutes between manual syncs.",
+			"message": "Please wait 1 minute between manual syncs.",
 		})
 		return
 	}
@@ -674,7 +674,12 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if changed {
-		_, err := h.DB.Exec(r.Context(), "UPDATE users SET platforms = $1, use_dedicated = $2 WHERE id = $3", req.Platforms, req.UseDedicated, userID)
+		var err error
+		if req.UseDedicated {
+			_, err = h.DB.Exec(r.Context(), "UPDATE users SET platforms = $1, use_dedicated = $2 WHERE id = $3", req.Platforms, req.UseDedicated, userID)
+		} else {
+			_, err = h.DB.Exec(r.Context(), "UPDATE users SET platforms = $1, use_dedicated = $2, calendar_id = NULL WHERE id = $3", req.Platforms, req.UseDedicated, userID)
+		}
 		if err != nil {
 			slog.Error("failed to update user platforms in write db", "user_id", userID, "error", err)
 			http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)

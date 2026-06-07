@@ -159,7 +159,7 @@ func main() {
 
 	r.Use(api.RequestIDMiddleware)
 	r.Use(api.SecurityHeadersMiddleware(cfg.Env))
-	r.Use(api.RateLimitMiddleware(valkeyClient, 60, time.Minute))
+	r.Use(api.RateLimitMiddleware(valkeyClient, 300, time.Minute))
 	r.Use(middleware.Compress(5))
 	r.Use(api.RequestLoggerMiddleware)
 	r.Use(middleware.Recoverer)
