@@ -225,11 +225,11 @@ func SecurityHeadersMiddleware(env string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			csp := "default-src 'self'; " +
-				"script-src 'self' https://hcaptcha.com https://*.hcaptcha.com; " +
+				"script-src 'self' https://hcaptcha.com https://*.hcaptcha.com https://static.cloudflareinsights.com; " +
 				"style-src 'self' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com; " +
 				"font-src 'self' data: https://hcaptcha.com https://*.hcaptcha.com; " +
 				"img-src 'self' data: https: https://hcaptcha.com https://*.hcaptcha.com; " +
-				"connect-src 'self' https://api.github.com https://hcaptcha.com https://*.hcaptcha.com; " +
+				"connect-src 'self' https://api.github.com https://hcaptcha.com https://*.hcaptcha.com https://cloudflareinsights.com; " +
 				"frame-src 'self' https://hcaptcha.com https://*.hcaptcha.com; " +
 				"frame-ancestors 'none'; " +
 				"base-uri 'self'; " +
