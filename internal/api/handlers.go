@@ -459,7 +459,7 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 											break
 										}
 										if gErr, ok := delErr.(*googleapi.Error); ok {
-											if gErr.Code == http.StatusNotFound {
+											if gErr.Code == http.StatusNotFound || gErr.Code == http.StatusGone {
 												break
 											}
 											if gErr.Code == http.StatusBadRequest || gErr.Code == http.StatusUnauthorized {
@@ -474,13 +474,14 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 										}
 									}
 									if delErr != nil {
-										if gErr, ok := delErr.(*googleapi.Error); ok && gErr.Code == http.StatusNotFound {
+										if gErr, ok := delErr.(*googleapi.Error); ok && (gErr.Code == http.StatusNotFound || gErr.Code == http.StatusGone) {
 											slog.Info("primary calendar event already deleted in background", "user_id", userID, "event_id", id)
 										} else {
 											slog.Error("failed to delete primary calendar event in background", "user_id", userID, "event_id", id, "error", delErr)
 										}
 									}
 								}(eid)
+								time.Sleep(100 * time.Millisecond)
 							}
 							wg.Wait()
 						} else {
