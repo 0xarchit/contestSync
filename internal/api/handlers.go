@@ -200,12 +200,13 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var userID int
+	var platforms []string
 	err = h.DB.QueryRow(r.Context(), `
 		INSERT INTO users (google_id, email, refresh_token)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (google_id) DO UPDATE SET email = $2, refresh_token = CASE WHEN $3 <> '' THEN $3 ELSE users.refresh_token END
-		RETURNING id
-	`, userInfo.ID, userInfo.Email, encryptedRefreshToken).Scan(&userID)
+		RETURNING id, platforms
+	`, userInfo.ID, userInfo.Email, encryptedRefreshToken).Scan(&userID, &platforms)
 
 	if err != nil {
 		slog.Error("failed to upsert user", "error", err)
@@ -220,7 +221,6 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Create session
 	session, err := h.SessionStore.Get(r, "session")
 	if err != nil {
 		slog.Warn("corrupted session, creating new", "error", err)
@@ -248,9 +248,10 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("user logged in", "user_id", userID)
 
-	// Queue initial sync for new/returning user
-	if err := h.Queue.PublishSyncTask(r.Context(), userID); err != nil {
-		slog.Error("failed to queue initial sync", "user_id", userID, "error", err)
+	if len(platforms) > 0 {
+		if err := h.Queue.PublishSyncTask(r.Context(), userID); err != nil {
+			slog.Error("failed to queue initial sync", "user_id", userID, "error", err)
+		}
 	}
 
 	http.Redirect(w, r, "/preferences", http.StatusSeeOther)

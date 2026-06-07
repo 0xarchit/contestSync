@@ -402,13 +402,27 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 
 		if err != nil {
 			if gErr, ok := err.(*googleapi.Error); ok && gErr.Code == http.StatusConflict {
-				_, err = s.DB.Exec(ctx, "INSERT INTO synced_events (user_id, contest_id, google_event_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", userID, c.ID, detID)
-				if err != nil {
-					slog.Error("failed to reconcile synced event on conflict", "user_id", userID, "contest_id", c.ID, "error", err)
-				} else {
-					anySynced = true
+				event.Status = "confirmed"
+				var updErr error
+				for attempt := 1; attempt <= 3; attempt++ {
+					_, updErr = srv.Events.Update(user.CalendarID, detID, event).Context(ctx).Do()
+					if updErr == nil {
+						break
+					}
+					if attempt < 3 {
+						time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+					}
 				}
-				continue
+				if updErr == nil {
+					_, dbErr := s.DB.Exec(ctx, "INSERT INTO synced_events (user_id, contest_id, google_event_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", userID, c.ID, detID)
+					if dbErr != nil {
+						slog.Error("failed to save synced event on restored conflict", "user_id", userID, "contest_id", c.ID, "error", dbErr)
+					} else {
+						anySynced = true
+					}
+					continue
+				}
+				slog.Error("failed to update event on conflict", "user_id", userID, "contest_id", c.ID, "error", updErr)
 			}
 			if deleted, syncErr := s.handleSyncError(ctx, userID, err); deleted {
 				return syncErr
