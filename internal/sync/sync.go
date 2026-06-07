@@ -171,6 +171,62 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 		}
 	}
 
+	selectedPlatforms := make(map[string]bool)
+	for _, p := range platforms {
+		selectedPlatforms[p] = true
+	}
+
+	dbPoolRead := s.ReadDB
+	if dbPoolRead == nil {
+		dbPoolRead = s.DB
+	}
+	delRows, delErr := dbPoolRead.Query(ctx, "SELECT se.contest_id, se.google_event_id, c.platform FROM synced_events se JOIN contests c ON se.contest_id = c.id WHERE se.user_id = $1", userID)
+	if delErr != nil {
+		slog.Error("failed to query synced events for unselected platform cleanup", "user_id", userID, "error", delErr)
+	} else {
+		defer delRows.Close()
+		type toDelete struct {
+			contestID     string
+			googleEventID string
+		}
+		var listToDelete []toDelete
+		for delRows.Next() {
+			var cid, geid, plat string
+			if scanErr := delRows.Scan(&cid, &geid, &plat); scanErr == nil {
+				if !selectedPlatforms[plat] {
+					listToDelete = append(listToDelete, toDelete{contestID: cid, googleEventID: geid})
+				}
+			}
+		}
+		delRows.Close()
+
+		for _, item := range listToDelete {
+			var err error
+			for attempt := 1; attempt <= 3; attempt++ {
+				err = srv.Events.Delete(user.CalendarID, item.googleEventID).Context(ctx).Do()
+				if err == nil {
+					break
+				}
+				if gErr, ok := err.(*googleapi.Error); ok && gErr.Code == http.StatusNotFound {
+					break
+				}
+				if attempt < 3 {
+					time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+				}
+			}
+			if err != nil {
+				if gErr, ok := err.(*googleapi.Error); ok && gErr.Code == http.StatusNotFound {
+					slog.Info("google event already deleted for unselected platform", "user_id", userID, "event_id", item.googleEventID)
+				} else {
+					slog.Error("failed to delete google event for unselected platform", "user_id", userID, "event_id", item.googleEventID, "error", err)
+				}
+			}
+			if _, dbErr := s.DB.Exec(ctx, "DELETE FROM synced_events WHERE user_id = $1 AND contest_id = $2", userID, item.contestID); dbErr != nil {
+				slog.Error("failed to delete synced event from DB for unselected platform", "user_id", userID, "contest_id", item.contestID, "error", dbErr)
+			}
+		}
+	}
+
 	syncedMap := make(map[string]bool)
 	var syncedIDs []string
 	cacheKeySE := models.SyncedEventsCacheKey(userID)

@@ -6,13 +6,16 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/0xarchit/contestsync/internal/auth"
@@ -20,10 +23,12 @@ import (
 	"github.com/0xarchit/contestsync/internal/queue"
 	"github.com/0xarchit/contestsync/models"
 	"github.com/gorilla/sessions"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -36,6 +41,7 @@ type Handlers struct {
 	Queue         *queue.Queue
 	Valkey        *redis.Client
 	Env           string
+	CleanupWG     sync.WaitGroup
 }
 
 func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
@@ -318,11 +324,11 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 
 	var calendarID string
 	var encryptedRefreshToken string
-	err := h.DB.QueryRow(r.Context(), "SELECT calendar_id, refresh_token FROM users WHERE id = $1", userID).Scan(&calendarID, &encryptedRefreshToken)
+	err := h.DB.QueryRow(r.Context(), "SELECT COALESCE(calendar_id, ''), refresh_token FROM users WHERE id = $1", userID).Scan(&calendarID, &encryptedRefreshToken)
 
 	var eventIDs []string
 	if err == nil && deleteGoogleData {
-		rows, qErr := h.DB.Query(r.Context(), "SELECT se.google_event_id FROM synced_events se JOIN contests c ON se.contest_id = c.id WHERE se.user_id = $1 AND c.start_time > NOW()", userID)
+		rows, qErr := h.DB.Query(r.Context(), "SELECT google_event_id FROM synced_events WHERE user_id = $1", userID)
 		if qErr == nil {
 			for rows.Next() {
 				var eid string
@@ -331,40 +337,164 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			rows.Close()
+		} else {
+			slog.Error("failed to query synced events on account deletion", "user_id", userID, "error", qErr)
 		}
 	}
 
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+			return
+		}
+		slog.Error("failed to fetch user details on account deletion", "user_id", userID, "error", err)
+	}
+
 	if err == nil && encryptedRefreshToken != "" {
-		if refreshToken, decryptErr := auth.DecryptToken(encryptedRefreshToken, h.SessionSecret); decryptErr == nil && refreshToken != "" {
+		refreshToken, decryptErr := auth.DecryptToken(encryptedRefreshToken, h.SessionSecret)
+		if decryptErr != nil {
+			slog.Error("failed to decrypt refresh token on account deletion", "user_id", userID, "error", decryptErr)
+		} else if refreshToken == "" {
+			slog.Warn("decrypted refresh token is empty on account deletion", "user_id", userID)
+		} else {
+			h.CleanupWG.Add(1)
 			go func() {
-				ctx := context.Background()
+				defer h.CleanupWG.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("panic in background account cleanup", "user_id", userID, "recover", r, "stack", string(debug.Stack()))
+					}
+				}()
+				timeout := time.Duration(len(eventIDs)) * 100 * time.Millisecond
+				if timeout < 10*time.Second {
+					timeout = 10 * time.Second
+				}
+				if timeout > 20*time.Second {
+					timeout = 20 * time.Second
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				defer cancel()
+				slog.Info("starting google cleanup in background", "user_id", userID, "delete_google_data", deleteGoogleData, "calendar_id", calendarID, "event_count", len(eventIDs))
+				defer slog.Info("google cleanup finished in background", "user_id", userID)
 				if deleteGoogleData {
 					tokenSource := h.AuthProvider.Config.TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken})
 					srv, srvErr := calendar.NewService(ctx, option.WithTokenSource(tokenSource))
-					if srvErr == nil {
+					if srvErr != nil {
+						slog.Error("failed to create calendar service in background on account deletion", "user_id", userID, "error", srvErr)
+					} else {
 						if calendarID != "" && calendarID != "primary" {
-							_ = srv.Calendars.Delete(calendarID).Context(ctx).Do()
-						} else if len(eventIDs) > 0 {
-							for _, eid := range eventIDs {
-								_ = srv.Events.Delete("primary", eid).Context(ctx).Do()
-								time.Sleep(50 * time.Millisecond)
+							var delErr error
+							for attempt := 1; attempt <= 3; attempt++ {
+								delErr = srv.Calendars.Delete(calendarID).Context(ctx).Do()
+								if delErr == nil {
+									break
+								}
+								if gErr, ok := delErr.(*googleapi.Error); ok {
+									if gErr.Code == http.StatusNotFound {
+										break
+									}
+									if gErr.Code == http.StatusBadRequest || gErr.Code == http.StatusUnauthorized {
+										break
+									}
+								}
+								if attempt < 3 {
+									time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+								}
 							}
+							if delErr != nil {
+								if gErr, ok := delErr.(*googleapi.Error); ok && gErr.Code == http.StatusNotFound {
+									slog.Info("custom calendar already deleted in background", "user_id", userID, "calendar_id", calendarID)
+								} else {
+									slog.Error("failed to delete custom calendar in background", "user_id", userID, "calendar_id", calendarID, "error", delErr)
+								}
+							} else {
+								slog.Info("successfully deleted custom calendar in background", "user_id", userID, "calendar_id", calendarID)
+							}
+						} else if len(eventIDs) > 0 {
+							toDelete := eventIDs
+							if len(toDelete) > 200 {
+								slog.Warn("large event batch on primary calendar deletion, capping to 200", "user_id", userID, "total_events", len(eventIDs))
+								toDelete = toDelete[:200]
+							}
+							var wg sync.WaitGroup
+							sem := make(chan struct{}, 20)
+							badToken := false
+							var mu sync.Mutex
+							for _, eid := range toDelete {
+								mu.Lock()
+								if badToken {
+									mu.Unlock()
+									break
+								}
+								mu.Unlock()
+								wg.Add(1)
+								go func(id string) {
+									defer wg.Done()
+									select {
+									case sem <- struct{}{}:
+									case <-ctx.Done():
+										return
+									}
+									defer func() { <-sem }()
+									var delErr error
+									for attempt := 1; attempt <= 3; attempt++ {
+										delErr = srv.Events.Delete("primary", id).Context(ctx).Do()
+										if delErr == nil {
+											break
+										}
+										if gErr, ok := delErr.(*googleapi.Error); ok {
+											if gErr.Code == http.StatusNotFound {
+												break
+											}
+											if gErr.Code == http.StatusBadRequest || gErr.Code == http.StatusUnauthorized {
+												mu.Lock()
+												badToken = true
+												mu.Unlock()
+												break
+											}
+										}
+										if attempt < 3 {
+											time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+										}
+									}
+									if delErr != nil {
+										if gErr, ok := delErr.(*googleapi.Error); ok && gErr.Code == http.StatusNotFound {
+											slog.Info("primary calendar event already deleted in background", "user_id", userID, "event_id", id)
+										} else {
+											slog.Error("failed to delete primary calendar event in background", "user_id", userID, "event_id", id, "error", delErr)
+										}
+									}
+								}(eid)
+							}
+							wg.Wait()
+						} else {
+							slog.Info("no custom calendar or primary events to delete", "user_id", userID)
 						}
 					}
 				}
 				resp, postErr := http.PostForm("https://oauth2.googleapis.com/revoke", url.Values{"token": {refreshToken}})
-				if postErr == nil {
-					resp.Body.Close()
+				if postErr != nil {
+					slog.Error("failed to revoke oauth token in background", "user_id", userID, "error", postErr)
 				} else {
-					slog.Error("failed to revoke oauth token", "error", postErr)
+					defer resp.Body.Close()
+					_, _ = io.Copy(io.Discard, resp.Body)
+					if resp.StatusCode != http.StatusOK {
+						slog.Warn("oauth revoke returned non-200 status in background", "user_id", userID, "status", resp.StatusCode)
+					} else {
+						slog.Info("successfully revoked oauth token in background", "user_id", userID)
+					}
 				}
 			}()
 		}
+	} else if err == nil && encryptedRefreshToken == "" {
+		slog.Warn("refresh token is empty on account deletion", "user_id", userID)
 	}
 
-	_, err = h.DB.Exec(r.Context(), "DELETE FROM users WHERE id = $1", userID)
-	if err != nil {
-		slog.Error("failed to delete user account", "user_id", userID, "error", err)
+	_, delErr := h.DB.Exec(r.Context(), "DELETE FROM users WHERE id = $1", userID)
+	if delErr != nil {
+		slog.Error("failed to delete user account", "user_id", userID, "error", delErr)
 		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
 		return
 	}

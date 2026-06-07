@@ -47,7 +47,7 @@ func (s *Scheduler) Start() {
 
 func (s *Scheduler) PruneOldData(ctx context.Context) {
 	slog.Info("starting data pruning task")
-	res, err := s.WriteDB.Exec(ctx, "DELETE FROM contests WHERE end_time < NOW() - INTERVAL '30 days'")
+	res, err := s.WriteDB.Exec(ctx, "DELETE FROM contests WHERE end_time < NOW()")
 	if err != nil {
 		slog.Error("failed to prune old contests", "error", err)
 	} else {

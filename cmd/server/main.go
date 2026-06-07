@@ -220,6 +220,21 @@ func main() {
 		slog.Error("server shutdown failed", "error", err)
 	}
 
+	cleanupTimeoutCtx, cancelCleanup := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancelCleanup()
+
+	cleanupDone := make(chan struct{})
+	go func() {
+		handlers.CleanupWG.Wait()
+		close(cleanupDone)
+	}()
+	select {
+	case <-cleanupDone:
+		slog.Info("all background cleanups finished")
+	case <-cleanupTimeoutCtx.Done():
+		slog.Warn("timed out waiting for background cleanups to finish")
+	}
+
 	slog.Info("draining consumer queue")
 	q.Drain()
 
