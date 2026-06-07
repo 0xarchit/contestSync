@@ -100,7 +100,7 @@ func (m *MemoryFS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", file.ContentType)
 	w.Header().Set("ETag", file.ETag)
-	if strings.HasSuffix(path, ".bundle.js") || strings.HasSuffix(path, ".bundle.css") || strings.HasSuffix(path, ".woff2") || strings.HasSuffix(path, ".webp") {
+	if strings.HasSuffix(path, ".woff2") || strings.HasSuffix(path, ".webp") {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	} else {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, must-revalidate")

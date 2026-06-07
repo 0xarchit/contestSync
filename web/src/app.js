@@ -1,16 +1,8 @@
 import './style.css';
-import { gsap } from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import Lenis from 'lenis';
 
-gsap.registerPlugin(ScrollTrigger);
-
-let lenis;
 let csrfToken = "";
 
 function initApp() {
-  console.log("ContestSync: Initializing App...");
-
   const path = window.location.pathname;
   const isPreferencesPage = path.includes("preferences");
 
@@ -21,213 +13,264 @@ function initApp() {
 
   const rm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  if (!rm) {
-    console.log("ContestSync: Starting Lenis...");
-    lenis = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-      wheelMultiplier: 1,
-      touchMultiplier: 2,
-    });
-
-    gsap.ticker.add((t) => {
-      lenis.raf(t * 1000);
-    });
-    gsap.ticker.lagSmoothing(0);
-
-    lenis.on("scroll", () => {
-      ScrollTrigger.update();
-    });
-  }
-
   const heroContent = document.querySelectorAll(
     ".hero-content > *, .hero-visual",
   );
   if (heroContent.length > 0) {
-    gsap.set(heroContent, { visibility: "visible" });
-
-    let heroTl = gsap.timeline({
-      delay: 0.2,
-      onComplete: () => ScrollTrigger.refresh(),
-    });
-
-    heroTl
-      .from(".badge", { opacity: 0, y: 20, duration: 0.6, ease: "power3.out" })
-      .from(
-        ".hero-title .line",
-        { opacity: 0, y: 60, stagger: 0.12, duration: 0.9, ease: "expo.out" },
-        "-=0.4",
-      )
-      .from(
-        ".hero-subtext",
-        { opacity: 0, y: 20, duration: 0.6, ease: "power3.out" },
-        "-=0.6",
-      )
-      .from(
-        ".hero-actions",
-        { opacity: 0, y: 20, duration: 0.6, ease: "power3.out" },
-        "-=0.4",
-      )
-      .from(
-        ".hero-visual",
-        { opacity: 0, x: 40, scale: 0.95, duration: 1, ease: "expo.out" },
-        "-=0.7",
-      );
-  }
-
-  if (!rm) {
-    if (document.querySelector(".hero-bg")) {
-      gsap.to(".hero-bg", {
-        y: 100,
-        ease: "none",
-        scrollTrigger: {
-          trigger: ".hero",
-          start: "top top",
-          end: "bottom top",
-          scrub: true,
-        },
-      });
-    }
-    if (document.querySelector(".hero-visual")) {
-      gsap.to(".hero-visual", {
-        y: -100,
-        ease: "none",
-        scrollTrigger: {
-          trigger: ".hero",
-          start: "top top",
-          end: "bottom top",
-          scrub: true,
-        },
-      });
-    }
-  }
-
-  let si = document.querySelector(".scroll-indicator");
-  if (si) {
-    ScrollTrigger.create({
-      trigger: ".hero",
-      start: "top top+=50",
-      onEnter: () => si.classList.add("is-hidden"),
-      onLeaveBack: () => si.classList.remove("is-hidden"),
-    });
-  }
-
-  if (document.querySelector(".problem-card")) {
-    gsap.from(".problem-card", {
-      opacity: 0,
-      y: 50,
-      stagger: 0.15,
-      duration: 0.8,
-      ease: "power4.out",
-      scrollTrigger: { trigger: ".problem", start: "top 80%" },
-    });
-  }
-
-  if (!rm && document.querySelector(".solution")) {
-    let solTl = gsap.timeline({
-      scrollTrigger: {
-        trigger: ".solution",
-        start: "top top",
-        end: "+=400%",
-        pin: true,
-        scrub: 1,
-        anticipatePin: 1,
-      },
-    });
-
-    let steps = document.querySelectorAll(".step");
-    let lineFgs = document.querySelectorAll(".line-fg");
-
-    steps.forEach((step, i) => {
-      solTl.to(
-        step,
-        {
-          opacity: 1,
-          duration: 1,
-          onStart: () => step.classList.add("active"),
-          onReverseComplete: () => step.classList.remove("active"),
-        },
-        i * 2.5,
-      );
-
-      if (lineFgs[i]) {
-        solTl.to(
-          lineFgs[i],
+    heroContent.forEach((el, index) => {
+      el.style.visibility = "visible";
+      if (!rm) {
+        const isVisual = el.classList.contains("hero-visual");
+        el.animate(
+          [
+            { 
+              opacity: 0, 
+              transform: isVisual ? "translateX(40px) scale(0.95)" : "translateY(20px)" 
+            },
+            { 
+              opacity: 1, 
+              transform: "none" 
+            }
+          ],
           {
-            attr: { "stroke-dashoffset": 0 },
-            duration: 1.5,
-          },
-          i * 2.5 + 0.8,
+            duration: isVisual ? 1000 : 600,
+            delay: 200 + index * 120,
+            fill: "forwards",
+            easing: "cubic-bezier(0.16, 1, 0.3, 1)"
+          }
         );
       }
     });
   }
 
-  if (document.querySelector(".platform-card")) {
-    gsap.from(".platform-card", {
-      opacity: 0,
-      scale: 0.9,
-      y: 30,
-      stagger: 0.08,
-      duration: 0.8,
-      ease: "back.out(1.2)",
-      scrollTrigger: { trigger: ".platforms", start: "top 85%" },
+  if (!rm) {
+    window.addEventListener("scroll", () => {
+      const scrolled = window.scrollY;
+      const heroBg = document.querySelector(".hero-bg");
+      if (heroBg) {
+        heroBg.style.transform = `translateY(${scrolled * 0.2}px)`;
+      }
+      const heroVisual = document.querySelector(".hero-visual");
+      if (heroVisual) {
+        heroVisual.style.transform = `translateY(-${scrolled * 0.15}px)`;
+      }
     });
   }
 
-  if (document.querySelector(".fake-calendar")) {
-    gsap.from(".fake-calendar", {
-      opacity: 0,
-      y: 60,
-      scale: 0.95,
-      duration: 1.2,
-      ease: "expo.out",
-      scrollTrigger: {
-        trigger: ".calendar-preview",
-        start: "top 75%",
-        onEnter: () => {
-          gsap.to(".event", {
-            opacity: 1,
-            scaleY: 1,
-            stagger: 0.12,
-            duration: 0.7,
-            ease: "power4.out",
-          });
-          document.querySelector(".fake-calendar")?.classList.add("shimmer");
-        },
+  let si = document.querySelector(".scroll-indicator");
+  if (si) {
+    window.addEventListener("scroll", () => {
+      if (window.scrollY > 50) {
+        si.classList.add("is-hidden");
+      } else {
+        si.classList.remove("is-hidden");
+      }
+    });
+  }
+
+  const problemCards = document.querySelectorAll(".problem-card");
+  if (problemCards.length > 0) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            problemCards.forEach((card, index) => {
+              if (rm) {
+                card.style.opacity = "1";
+                card.style.transform = "none";
+              } else {
+                card.animate(
+                  [
+                    { opacity: 0, transform: "translateY(50px)" },
+                    { opacity: 1, transform: "none" }
+                  ],
+                  {
+                    duration: 800,
+                    delay: index * 150,
+                    fill: "forwards",
+                    easing: "cubic-bezier(0.25, 1, 0.5, 1)"
+                  }
+                );
+              }
+            });
+            observer.disconnect();
+          }
+        });
       },
-    });
+      { threshold: 0.1 }
+    );
+    const problemSec = document.querySelector(".problem");
+    if (problemSec) observer.observe(problemSec);
   }
 
-  document.querySelectorAll(".txt-reveal").forEach((el) => {
-    ScrollTrigger.create({
-      trigger: el,
-      start: "top 90%",
-      onEnter: () => el.classList.add("filled"),
-      onLeaveBack: () => el.classList.remove("filled"),
-    });
-  });
+  const steps = document.querySelectorAll(".step");
+  const lineFgs = document.querySelectorAll(".line-fg");
+  if (steps.length > 0) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("active");
+            const idx = Array.from(steps).indexOf(entry.target);
+            if (idx >= 0 && lineFgs[idx]) {
+              if (rm) {
+                lineFgs[idx].style.strokeDashoffset = "0";
+              } else {
+                lineFgs[idx].style.transition = "stroke-dashoffset 0.8s ease-out";
+                lineFgs[idx].style.strokeDashoffset = "0";
+              }
+            }
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+    steps.forEach((step) => observer.observe(step));
+  }
 
-  document.querySelectorAll(".reveal-wrap").forEach((w) => {
-    let child = w.firstElementChild;
-    if (child) {
-      gsap.from(child, {
-        y: 100,
-        duration: 1,
-        ease: "power4.out",
-        scrollTrigger: { trigger: w, start: "top 95%" },
-      });
-    }
-  });
+  const platformCards = document.querySelectorAll(".platform-card");
+  if (platformCards.length > 0) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            platformCards.forEach((card, index) => {
+              if (rm) {
+                card.style.opacity = "1";
+                card.style.transform = "none";
+              } else {
+                card.animate(
+                  [
+                    { opacity: 0, transform: "scale(0.9) translateY(30px)" },
+                    { opacity: 1, transform: "none" }
+                  ],
+                  {
+                    duration: 800,
+                    delay: index * 80,
+                    fill: "forwards",
+                    easing: "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+                  }
+                );
+              }
+            });
+            observer.disconnect();
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+    const platformsSec = document.querySelector(".platforms");
+    if (platformsSec) observer.observe(platformsSec);
+  }
+
+  const calendarPreview = document.querySelector(".calendar-preview");
+  const fakeCalendar = document.querySelector(".fake-calendar");
+  const events = document.querySelectorAll(".event");
+  if (calendarPreview && fakeCalendar) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            if (rm) {
+              fakeCalendar.style.opacity = "1";
+              fakeCalendar.style.transform = "none";
+              events.forEach((ev) => {
+                ev.style.opacity = "1";
+                ev.style.transform = "none";
+              });
+            } else {
+              fakeCalendar.animate(
+                [
+                  { opacity: 0, transform: "translateY(60px) scale(0.95)" },
+                  { opacity: 1, transform: "none" }
+                ],
+                {
+                  duration: 1200,
+                  easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+                  fill: "forwards"
+                }
+              );
+              events.forEach((ev, idx) => {
+                ev.animate(
+                  [
+                    { opacity: 0, transform: "scaleY(0)" },
+                    { opacity: 1, transform: "scaleY(1)" }
+                  ],
+                  {
+                    duration: 700,
+                    delay: idx * 120,
+                    easing: "cubic-bezier(0.25, 1, 0.5, 1)",
+                    fill: "forwards"
+                  }
+                );
+              });
+            }
+            fakeCalendar.classList.add("shimmer");
+            observer.disconnect();
+          }
+        });
+      },
+      { threshold: 0.2 }
+    );
+    observer.observe(calendarPreview);
+  }
+
+  const txtReveals = document.querySelectorAll(".txt-reveal");
+  if (txtReveals.length > 0) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("filled");
+          } else {
+            entry.target.classList.remove("filled");
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+    txtReveals.forEach((el) => observer.observe(el));
+  }
+
+  const revealWraps = document.querySelectorAll(".reveal-wrap");
+  if (revealWraps.length > 0) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const child = entry.target.firstElementChild;
+            if (child) {
+              if (rm) {
+                child.style.transform = "none";
+              } else {
+                child.animate(
+                  [
+                    { transform: "translateY(100px)" },
+                    { transform: "translateY(0)" }
+                  ],
+                  {
+                    duration: 1000,
+                    easing: "cubic-bezier(0.25, 1, 0.5, 1)",
+                    fill: "forwards"
+                  }
+                );
+              }
+            }
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.05 }
+    );
+    revealWraps.forEach((w) => observer.observe(w));
+  }
 
   document.querySelectorAll('a[href^="#"]').forEach((a) => {
     a.addEventListener("click", (e) => {
       e.preventDefault();
       let target = document.querySelector(a.getAttribute("href"));
       if (target) {
-        if (lenis) lenis.scrollTo(target);
-        else target.scrollIntoView({ behavior: "smooth" });
+        target.scrollIntoView({ behavior: "smooth" });
       }
     });
   });
@@ -245,19 +288,23 @@ function initApp() {
       })
       .catch((err) => console.error(err));
   }
-
-  ScrollTrigger.refresh();
 }
 
 async function initPreferences() {
-  console.log("ContestSync: Initializing Preferences...");
   let card = document.querySelector(".pref-card");
-  if (card)
-    gsap.fromTo(
-      card,
-      { opacity: 0, y: 20 },
-      { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" },
+  if (card) {
+    card.animate(
+      [
+        { opacity: 0, transform: "translateY(20px)" },
+        { opacity: 1, transform: "translateY(0)" }
+      ],
+      {
+        duration: 500,
+        easing: "ease-out",
+        fill: "forwards"
+      }
     );
+  }
 
   let existingPlatforms = [];
   try {
@@ -277,7 +324,7 @@ async function initPreferences() {
       return;
     }
   } catch (e) {
-    console.error("Pref: me fetch failed", e);
+    console.error(e);
   }
 
   try {
@@ -405,13 +452,13 @@ async function initPreferences() {
               alert(`Failed to delete account: ${data.error || res.statusText}`);
             }
           } catch (err) {
-            console.error("Delete failed", err);
+            console.error(err);
           }
         }
       });
     }
   } catch (e) {
-    console.error("Pref: platforms fetch failed", e);
+    console.error(e);
   }
 }
 
@@ -445,38 +492,50 @@ function showSuccess(message, subMessage) {
     subMessage ||
     "Contests will appear in your Google Calendar within a few minutes.";
 
-  gsap.to(card, {
-    opacity: 0,
-    y: -20,
-    duration: 0.4,
-    onComplete: () => {
-      card.innerHTML = `
-                <div class="success-state centered">
-                    <div style="margin-bottom:1.5rem;">
-                        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                    </div>
-                    <h1>You're all set.</h1>
-                    <p>${mainMsg}</p>
-                    <p style="margin-top:0.5rem; font-size:var(--t-label); color:var(--text-dim);">${subMsg}</p>
-                    <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; margin-top:1.5rem;">
-                        <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
-                            Open Google Calendar
-                        </a>
-                        <a href="/" class="btn btn-ghost" style="padding:1rem 1.5rem; border:1px solid var(--bg-border); border-radius:8px;">
-                            ← Back to Home
-                        </a>
-                    </div>
-                </div>
-            `;
-      gsap.fromTo(
-        card,
-        { opacity: 0, y: 20 },
-        { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" },
-      );
-    },
-  });
+  const fadeOut = card.animate(
+    [
+      { opacity: 1, transform: "translateY(0)" },
+      { opacity: 0, transform: "translateY(-20px)" }
+    ],
+    {
+      duration: 400,
+      easing: "ease-in",
+      fill: "forwards"
+    }
+  );
+  fadeOut.onfinish = () => {
+    card.innerHTML = `
+      <div class="success-state centered">
+          <div style="margin-bottom:1.5rem;">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+          </div>
+          <h1>You're all set.</h1>
+          <p>${mainMsg}</p>
+          <p style="margin-top:0.5rem; font-size:var(--t-label); color:var(--text-dim);">${subMsg}</p>
+          <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; margin-top:1.5rem;">
+              <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+                  Open Google Calendar
+              </a>
+              <a href="/" class="btn btn-ghost" style="padding:1rem 1.5rem; border:1px solid var(--bg-border); border-radius:8px;">
+                  ← Back to Home
+              </a>
+          </div>
+      </div>
+    `;
+    card.animate(
+      [
+        { opacity: 0, transform: "translateY(20px)" },
+        { opacity: 1, transform: "translateY(0)" }
+      ],
+      {
+        duration: 500,
+        easing: "ease-out",
+        fill: "forwards"
+      }
+    );
+  };
 }
 
 function showToast(message, type = "success") {
@@ -505,21 +564,31 @@ function showToast(message, type = "success") {
   `;
   container.appendChild(toast);
 
-  gsap.fromTo(
-    toast,
-    { opacity: 0, y: 20, scale: 0.9 },
-    { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power3.out" },
+  toast.animate(
+    [
+      { opacity: 0, transform: "translateY(20px) scale(0.9)" },
+      { opacity: 1, transform: "translateY(0) scale(1)" }
+    ],
+    {
+      duration: 400,
+      easing: "ease-out",
+      fill: "forwards"
+    }
   );
 
   setTimeout(() => {
-    gsap.to(toast, {
-      opacity: 0,
-      y: -20,
-      scale: 0.9,
-      duration: 0.4,
-      ease: "power3.in",
-      onComplete: () => toast.remove(),
-    });
+    const fadeOut = toast.animate(
+      [
+        { opacity: 1, transform: "translateY(0) scale(1)" },
+        { opacity: 0, transform: "translateY(-20px) scale(0.9)" }
+      ],
+      {
+        duration: 400,
+        easing: "ease-in",
+        fill: "forwards"
+      }
+    );
+    fadeOut.onfinish = () => toast.remove();
   }, 4000);
 }
 
@@ -557,22 +626,30 @@ function initGlobalInteractivity() {
       document.body.appendChild(cursorDot);
     }
 
+    let mouseX = 0, mouseY = 0;
+    let cursorX = 0, cursorY = 0;
     document.addEventListener("mousemove", (e) => {
-      gsap.to(cursor, {
-        x: e.clientX,
-        y: e.clientY,
-        duration: 0.3,
-        ease: "power2.out",
-      });
-      gsap.to(cursorDot, { x: e.clientX, y: e.clientY, duration: 0.05 });
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      cursorDot.style.transform = `translate(${mouseX}px, ${mouseY}px)`;
     });
 
+    function tickCursor() {
+      const dx = mouseX - cursorX;
+      const dy = mouseY - cursorY;
+      cursorX += dx * 0.15;
+      cursorY += dy * 0.15;
+      cursor.style.transform = `translate(${cursorX}px, ${cursorY}px) scale(${cursor.dataset.scale || 1})`;
+      requestAnimationFrame(tickCursor);
+    }
+    tickCursor();
+
     document.addEventListener("mousedown", () => {
-      gsap.to(cursor, { scale: 0.8, duration: 0.1 });
+      cursor.dataset.scale = "0.8";
     });
 
     document.addEventListener("mouseup", () => {
-      gsap.to(cursor, { scale: 1, duration: 0.15 });
+      cursor.dataset.scale = "1";
     });
 
     const addHoverListeners = () => {
@@ -611,22 +688,14 @@ function initGlobalInteractivity() {
 
       const tiltX = x - rect.width / 2;
       const tiltY = y - rect.height / 2;
-      gsap.to(card, {
-        rotateY: tiltX * 0.08,
-        rotateX: -tiltY * 0.08,
-        duration: 0.3,
-        ease: "power2.out",
-      });
+      card.style.transition = "transform 0.1s ease-out";
+      card.style.transform = `rotateY(${tiltX * 0.08}deg) rotateX(${-tiltY * 0.08}deg)`;
     });
 
     card.addEventListener("mouseleave", () => {
       rect = null;
-      gsap.to(card, {
-        rotateY: 0,
-        rotateX: 0,
-        duration: 0.5,
-        ease: "power2.out",
-      });
+      card.style.transition = "transform 0.5s ease-out";
+      card.style.transform = "rotateY(0deg) rotateX(0deg)";
     });
   });
 }

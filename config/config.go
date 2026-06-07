@@ -20,7 +20,6 @@ type Config struct {
 	Port                   string
 	WorkerPort             string
 	Env                    string
-	AllowedOrigin          string
 	AdminPassword          string
 	KafkaHost              string
 	KafkaPort              string
@@ -107,7 +106,6 @@ func Load() *Config {
 		Port:                   port,
 		WorkerPort:             workerPort,
 		Env:                    env,
-		AllowedOrigin:          os.Getenv("ALLOWED_ORIGIN"),
 		AdminPassword:          os.Getenv("ADMIN_PASSWORD"),
 		KafkaHost:              os.Getenv("KAFKA_HOST"),
 		KafkaPort:              os.Getenv("KAFKA_PORT"),

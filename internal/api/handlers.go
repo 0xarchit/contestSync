@@ -37,7 +37,7 @@ type Handlers struct {
 	ReadDB        *pgxpool.Pool
 	SessionStore  sessions.Store
 	AuthProvider  *auth.Provider
-	SessionSecret []byte
+	EncryptionKey []byte
 	Queue         *queue.Queue
 	Valkey        *redis.Client
 	Env           string
@@ -98,6 +98,19 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "sync queued"})
+}
+
+func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
+	session, err := h.SessionStore.Get(r, "session")
+	if err == nil {
+		session.Options.MaxAge = -1
+		if err := session.Save(r, w); err != nil {
+			slog.Error("failed to clear session on logout", "error", err)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "logged out"})
 }
 
 func (h *Handlers) GoogleLogin(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +193,7 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	encryptedRefreshToken := ""
 	if token.RefreshToken != "" {
-		encryptedRefreshToken, err = auth.EncryptToken(token.RefreshToken, h.SessionSecret)
+		encryptedRefreshToken, err = auth.EncryptToken(token.RefreshToken, h.EncryptionKey)
 		if err != nil {
 			slog.Error("failed to encrypt refresh token", "error", err)
 		}
@@ -353,7 +366,7 @@ func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err == nil && encryptedRefreshToken != "" {
-		refreshToken, decryptErr := auth.DecryptToken(encryptedRefreshToken, h.SessionSecret)
+		refreshToken, decryptErr := auth.DecryptToken(encryptedRefreshToken, h.EncryptionKey)
 		if decryptErr != nil {
 			slog.Error("failed to decrypt refresh token on account deletion", "user_id", userID, "error", decryptErr)
 		} else if refreshToken == "" {
@@ -562,7 +575,12 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	secret := os.Getenv("HCAPTCHA_SECRET")
-	if secret != "" {
+	isDev := h.Env == "development" || h.Env == "dev" || h.Env == "local" || h.Env == ""
+	if secret == "" && !isDev {
+		http.Error(w, `{"error":"captcha configuration error"}`, http.StatusInternalServerError)
+		return
+	}
+	if secret != "" || !isDev {
 		if req.CaptchaResponse == "" {
 			http.Error(w, `{"error":"captcha verification required"}`, http.StatusBadRequest)
 			return
@@ -688,7 +706,11 @@ func generateRandomString(n int) (string, error) {
 func verifyHCaptcha(ctx context.Context, responseToken string) (bool, error) {
 	secret := os.Getenv("HCAPTCHA_SECRET")
 	if secret == "" {
-		return true, nil
+		env := os.Getenv("ENV")
+		if env == "development" || env == "dev" || env == "local" || env == "" {
+			return true, nil
+		}
+		return false, fmt.Errorf("hcaptcha secret is missing")
 	}
 	form := url.Values{
 		"secret":   {secret},

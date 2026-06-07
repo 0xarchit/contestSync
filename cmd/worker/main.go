@@ -88,7 +88,7 @@ func main() {
 		DB:            pool.WriteDB(),
 		ReadDB:        pool.ReadDB(),
 		AuthProvider:  authProvider,
-		SessionSecret: cfg.EncryptionKey,
+		EncryptionKey: cfg.EncryptionKey,
 		Valkey:        valkeyClient,
 	}
 

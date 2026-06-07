@@ -65,6 +65,12 @@ func main() {
 		log.Fatal("SESSION_SECRET must be configured and non-empty")
 	}
 
+	if cfg.Env != "development" && cfg.Env != "dev" && cfg.Env != "local" {
+		if os.Getenv("HCAPTCHA_SECRET") == "" {
+			log.Fatal("HCAPTCHA_SECRET must be configured in production")
+		}
+	}
+
 	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 
@@ -111,7 +117,7 @@ func main() {
 		DB:            pool.WriteDB(),
 		ReadDB:        pool.ReadDB(),
 		AuthProvider:  authProvider,
-		SessionSecret: cfg.EncryptionKey,
+		EncryptionKey: cfg.EncryptionKey,
 		Valkey:        valkeyClient,
 	}
 
@@ -127,7 +133,7 @@ func main() {
 		ReadDB:        pool.ReadDB(),
 		SessionStore:  sessionStore,
 		AuthProvider:  authProvider,
-		SessionSecret: cfg.EncryptionKey,
+		EncryptionKey: cfg.EncryptionKey,
 		Queue:         q,
 		Valkey:        valkeyClient,
 		Env:           cfg.Env,
@@ -165,6 +171,7 @@ func main() {
 
 	r.Group(func(r chi.Router) {
 		r.Use(api.RateLimitMiddleware(valkeyClient, 10, 15*time.Minute))
+		r.Use(api.CSRFMiddleware(sessionStore))
 		r.Post("/admin/update", adminHandlers.UpdateContests)
 		r.Post("/admin/sync", adminHandlers.SyncAll)
 	})
@@ -179,6 +186,7 @@ func main() {
 			r.Post("/preferences", handlers.SavePreferences)
 			r.Post("/sync", handlers.ManualSync)
 			r.Delete("/account", handlers.DeleteAccount)
+			r.Post("/auth/logout", handlers.Logout)
 		})
 	})
 

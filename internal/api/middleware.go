@@ -225,11 +225,11 @@ func SecurityHeadersMiddleware(env string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			csp := "default-src 'self'; " +
-				"script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://hcaptcha.com https://*.hcaptcha.com https://static.cloudflareinsights.com; " +
-				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://hcaptcha.com https://*.hcaptcha.com; " +
-				"font-src 'self' https://fonts.gstatic.com data: https://hcaptcha.com https://*.hcaptcha.com; " +
+				"script-src 'self' https://hcaptcha.com https://*.hcaptcha.com; " +
+				"style-src 'self' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com; " +
+				"font-src 'self' data: https://hcaptcha.com https://*.hcaptcha.com; " +
 				"img-src 'self' data: https: https://hcaptcha.com https://*.hcaptcha.com; " +
-				"connect-src 'self' https://api.github.com https://unpkg.com https://hcaptcha.com https://*.hcaptcha.com https://cloudflareinsights.com; " +
+				"connect-src 'self' https://api.github.com https://hcaptcha.com https://*.hcaptcha.com; " +
 				"frame-src 'self' https://hcaptcha.com https://*.hcaptcha.com; " +
 				"frame-ancestors 'none'; " +
 				"base-uri 'self'; " +
@@ -242,7 +242,7 @@ func SecurityHeadersMiddleware(env string) func(http.Handler) http.Handler {
 			w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 
 			if env == "production" {
-				w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+				w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 			}
 
 			next.ServeHTTP(w, r)
@@ -278,6 +278,10 @@ func RequireAuth(store sessions.Store) func(http.Handler) http.Handler {
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
 			}
+			session.Options.MaxAge = 86400 * 7
+			if saveErr := session.Save(r, w); saveErr != nil {
+				slog.Error("failed to renew session sliding window", "user_id", userID, "error", saveErr)
+			}
 			ctx := context.WithValue(r.Context(), ContextKeyUserID, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -287,6 +291,17 @@ func RequireAuth(store sessions.Store) func(http.Handler) http.Handler {
 func CSRFMiddleware(store sessions.Store) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hasCookie := false
+			if _, err := r.Cookie("session"); err == nil {
+				hasCookie = true
+			} else if strings.Contains(r.Header.Get("Cookie"), "session=") || strings.Contains(r.Header.Get("Set-Cookie"), "session=") {
+				hasCookie = true
+			}
+			if !hasCookie {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			session, _ := store.Get(r, "session")
 			expectedToken, ok := session.Values["csrf_token"].(string)
 			if !ok || expectedToken == "" {

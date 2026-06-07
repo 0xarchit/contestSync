@@ -111,17 +111,18 @@ body {
   background: var(--accent-primary);
 }
 
-html,
-body {
-  cursor: none;
-}
-a,
-button,
-.btn,
-.platform-card,
-.platform-item,
-.footer-links a {
-  cursor: none;
+@media (pointer: fine) {
+  html,
+  body,
+  a,
+  button,
+  .btn,
+  .platform-card,
+  .platform-item,
+  .footer-links a,
+  .faq-q {
+    cursor: none;
+  }
 }
 .custom-cursor {
   width: 40px;
@@ -1361,7 +1362,7 @@ section {
   font-family: "Syne", sans-serif;
   font-weight: 700;
   font-size: clamp(0.95rem, 1.5vw, 1.1rem);
-  cursor: none;
+  cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;

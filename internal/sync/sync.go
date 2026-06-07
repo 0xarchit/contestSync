@@ -27,7 +27,7 @@ type Syncer struct {
 	DB            *pgxpool.Pool
 	ReadDB        *pgxpool.Pool
 	AuthProvider  *auth.Provider
-	SessionSecret []byte
+	EncryptionKey []byte
 	Valkey        *redis.Client
 	syncingUsers  sync.Map
 }
@@ -120,7 +120,7 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 		}
 	}()
 
-	refreshToken, err := auth.DecryptToken(encryptedRefreshToken, s.SessionSecret)
+	refreshToken, err := auth.DecryptToken(encryptedRefreshToken, s.EncryptionKey)
 	if err != nil {
 		return err
 	}
