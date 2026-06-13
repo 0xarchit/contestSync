@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	stdSync "sync"
 	"time"
 
@@ -324,7 +325,11 @@ func (q *Queue) consumeExtraction(ctx context.Context, cfg *config.Config) {
 			if ctx.Err() != nil {
 				return
 			}
-			slog.Error("kafka extraction reader error", "error", err)
+			if isTransientNetworkError(err) {
+				slog.Info("kafka extraction reader network connection closed, reconnecting", "error", err)
+			} else {
+				slog.Error("kafka extraction reader error", "error", err)
+			}
 			continue
 		}
 
@@ -372,7 +377,11 @@ func (q *Queue) consumeSync(ctx context.Context, cfg *config.Config) {
 			if ctx.Err() != nil {
 				return
 			}
-			slog.Error("kafka sync reader error", "error", err)
+			if isTransientNetworkError(err) {
+				slog.Info("kafka sync reader network connection closed, reconnecting", "error", err)
+			} else {
+				slog.Error("kafka sync reader error", "error", err)
+			}
 			continue
 		}
 
@@ -489,4 +498,15 @@ func (q *Queue) Close() error {
 		return q.Producer.Close()
 	}
 	return nil
+}
+
+func isTransientNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "EOF") ||
+		strings.Contains(errStr, "closed network connection") ||
+		strings.Contains(errStr, "broken pipe") ||
+		strings.Contains(errStr, "connection reset by peer")
 }
