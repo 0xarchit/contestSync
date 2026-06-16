@@ -1,7 +1,6 @@
 package api
 
 import (
-	"container/list"
 	"context"
 	"crypto/subtle"
 	"encoding/hex"
@@ -13,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,117 +20,52 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type lruItem struct {
-	key   string
-	value []time.Time
-}
-
-type rateLimiter struct {
-	sync.Mutex
-	cap   int
-	evict *list.List
-	cache map[string]*list.Element
-}
-
-func (rl *rateLimiter) limit(ip string, max int, duration time.Duration) bool {
-	rl.Lock()
-	defer rl.Unlock()
-
-	now := time.Now()
-	if rl.cache == nil {
-		rl.cache = make(map[string]*list.Element)
-		rl.evict = list.New()
-		if rl.cap == 0 {
-			rl.cap = 10000
-		}
-	}
-
-	var item *lruItem
-	if elem, ok := rl.cache[ip]; ok {
-		rl.evict.MoveToFront(elem)
-		item = elem.Value.(*lruItem)
-	} else {
-		if rl.evict.Len() >= rl.cap {
-			back := rl.evict.Back()
-			if back != nil {
-				rl.evict.Remove(back)
-				backItem := back.Value.(*lruItem)
-				delete(rl.cache, backItem.key)
-			}
-		}
-		item = &lruItem{key: ip, value: []time.Time{}}
-		elem := rl.evict.PushFront(item)
-		rl.cache[ip] = elem
-	}
-
-	var filtered []time.Time
-	for _, t := range item.value {
-		if now.Sub(t) < duration {
-			filtered = append(filtered, t)
-		}
-	}
-
-	if len(filtered) >= max {
-		item.value = filtered
-		return false
-	}
-
-	item.value = append(filtered, now)
-	return true
-}
-
-type VelocityCounter struct {
-	hits      int64
+type ipLimit struct {
+	hits      int
 	resetTime time.Time
 }
 
-type EarlyRateLimiter struct {
-	mu       sync.RWMutex
-	counters map[string]*VelocityCounter
+type localLimiter struct {
+	sync.Mutex
+	counters map[string]*ipLimit
 }
 
-func NewEarlyRateLimiter() *EarlyRateLimiter {
-	return &EarlyRateLimiter{
-		counters: make(map[string]*VelocityCounter),
+func (l *localLimiter) allow(ip string, max int, duration time.Duration) bool {
+	l.Lock()
+	defer l.Unlock()
+
+	if l.counters == nil {
+		l.counters = make(map[string]*ipLimit)
 	}
-}
 
-func (el *EarlyRateLimiter) Allow(ip string, limit int64, duration time.Duration) bool {
-	el.mu.RLock()
-	counter, ok := el.counters[ip]
-	el.mu.RUnlock()
 	now := time.Now()
-	if !ok {
-		el.mu.Lock()
-		counter, ok = el.counters[ip]
-		if !ok {
-			counter = &VelocityCounter{
-				hits:      1,
-				resetTime: now.Add(duration),
+	if len(l.counters) > 10000 {
+		for k, v := range l.counters {
+			if now.After(v.resetTime) {
+				delete(l.counters, k)
 			}
-			el.counters[ip] = counter
-			el.mu.Unlock()
-			return true
 		}
-		el.mu.Unlock()
 	}
-	if now.After(counter.resetTime) {
-		el.mu.Lock()
-		if now.After(counter.resetTime) {
-			counter.hits = 1
-			counter.resetTime = now.Add(duration)
-		} else {
-			atomic.AddInt64(&counter.hits, 1)
+
+	lim, ok := l.counters[ip]
+	if !ok || now.After(lim.resetTime) {
+		l.counters[ip] = &ipLimit{
+			hits:      1,
+			resetTime: now.Add(duration),
 		}
-		el.mu.Unlock()
 		return true
 	}
-	val := atomic.AddInt64(&counter.hits, 1)
-	return val <= limit
+
+	if lim.hits >= max {
+		return false
+	}
+
+	lim.hits++
+	return true
 }
 
-var earlyLimiter = NewEarlyRateLimiter()
-var globalLimiter = &rateLimiter{cap: 10000}
+var earlyLimiter = &localLimiter{}
+var globalLimiter = &localLimiter{}
 
 func getClientIP(r *http.Request) string {
 	if os.Getenv("TRUST_PROXY") == "true" {
@@ -163,7 +96,7 @@ func RateLimitMiddleware(valkeyClient *redis.Client, max int, duration time.Dura
 
 			retryAfter := strconv.Itoa(int(duration.Seconds()))
 
-			if !earlyLimiter.Allow(ip, 150, 10*time.Second) {
+			if !earlyLimiter.allow(ip, 150, 10*time.Second) {
 				w.Header().Set("Retry-After", "60")
 				http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
 				return
@@ -184,14 +117,14 @@ func RateLimitMiddleware(valkeyClient *redis.Client, max int, duration time.Dura
 					}
 				} else {
 					slog.Error("valkey rate limiter error, falling back to local rate limiter", "error", err)
-					if !globalLimiter.limit(ip, max, duration) {
+					if !globalLimiter.allow(ip, max, duration) {
 						w.Header().Set("Retry-After", retryAfter)
 						http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
 						return
 					}
 				}
 			} else {
-				if !globalLimiter.limit(ip, max, duration) {
+				if !globalLimiter.allow(ip, max, duration) {
 					w.Header().Set("Retry-After", retryAfter)
 					http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
 					return
