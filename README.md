@@ -37,72 +37,9 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 
 ## Topological System Architecture
 
-```mermaid
-graph TB
-    subgraph ClientTier["Client Interface Layer"]
-        Browser["Browser UI (HTML5, Vanilla JS, GSAP Animations, Lenis)"]
-    end
-
-    subgraph ServiceTier["Dual-Binary Service Tier"]
-        Server["API Web Server (cmd/server)<br/>- Chi Router & Session Middleware<br/>- In-Memory Static Asset Compiler<br/>- Distributed sliding-window Rate Limiter"]
-        Worker["Background Worker (cmd/worker)<br/>- Semaphore-Bounded Task Consumers<br/>- Dedicated Kubernetes HTTP /health probe server"]
-    end
-
-    subgraph BrokerTier["Decoupled Message Broker Hub"]
-        Kafka["Apache Kafka Cluster<br/>- Topics: sync-tasks, extraction-tasks<br/>- Bounded Partitions / Replicas"]
-        InMem["In-Memory Local Channels<br/>- Zero-Dependency Local Queue Fallback"]
-    end
-
-    subgraph CacheLockTier["Distributed Valkey Cache & Locking Layer"]
-        Valkey["Valkey Server Instance<br/>- cache:user:id (User Preferences)<br/>- cache:contests:platform (Platform Contests)<br/>- cache:synced_events:id (Sync Registry)<br/>- cache:platforms (Static Lists)<br/>- lock:sync:id (Distributed Mutex Locks)<br/>- session:id (Gorilla Web Sessions)"]
-    end
-
-    subgraph DB_Tier["Replicated Neon Database Cluster (Read/Write Split)"]
-        DB_Write["Neon DB Primary (Write Primary)<br/>- Active write transactions<br/>- Direct connections for migrations"]
-        
-        subgraph Replicas["Neon Replica Pool (Round-Robin Counted)"]
-            DB_Read1["Neon DB Replica 1"]
-            DB_Read2["Neon DB Replica 2"]
-            DB_Read3["Neon DB Replica 3"]
-        end
-    end
-
-    subgraph ExternalAPI["External Services Integration"]
-        Google["Google Calendar API (v3)"]
-        LeetCode["LeetCode GraphQL"]
-        Codeforces["Codeforces API"]
-        CodeChef["CodeChef API"]
-        AtCoder["AtCoder Web Scraper"]
-        HackerRank["HackerRank API"]
-        GFG["GeeksforGeeks API"]
-        Code360["Code360 API"]
-    end
-
-    Browser <-->|HTTP / REST / JSON| Server
-    Server -->|Publish Sync & Extraction Tasks| Kafka
-    Server -.->|Local Channel Fallbacks| InMem
-    Worker -->|Consume Tasks & Execute Workflows| Kafka
-    Worker -.->|Local Channel Fallbacks| InMem
-
-    Server -->|Rate Limits & Sessions| Valkey
-    Worker -->|Distributed Lock Mutexes| Valkey
-    Worker -->|Cache Reads / Writes| Valkey
-
-    Server -->|Write Transactions & Migrations| DB_Write
-    Worker -->|Write Transactions| DB_Write
-
-    Server -->|Round-Robin Read Queries| Replicas
-    Worker -->|Round-Robin Read Queries| Replicas
-
-    Worker -->|OAuth Handshake & Event Ingestion| Google
-    Worker -->|Scrape Contests| LeetCode
-    Worker -->|Scrape Contests| Codeforces
-    Worker -->|Scrape Contests| CodeChef
-    Worker -->|Scrape Contests| AtCoder
-    Worker -->|Scrape Contests| HackerRank
-    Worker -->|Scrape Contests| GFG
-    Worker -->|Scrape Contests| Code360
-```
+<p align="center">
+  <img src="assets/contestSync_Diagram.gif" alt="ContestSync System Architecture" width="1080" style="border-radius: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.4);" />
+</p>
 
 ---
 
