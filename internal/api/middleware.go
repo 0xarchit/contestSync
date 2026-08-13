@@ -103,7 +103,7 @@ func RateLimitMiddleware(valkeyClient *redis.Client, max int, duration time.Dura
 			}
 
 			if valkeyClient != nil {
-				key := "ratelimit:" + ip
+				key := "ratelimit:" + r.URL.Path + ":" + ip
 				ctx := r.Context()
 				pipe := valkeyClient.TxPipeline()
 				incr := pipe.Incr(ctx, key)

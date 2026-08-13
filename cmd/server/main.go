@@ -196,7 +196,7 @@ func main() {
 		r.Get("/platforms", handlers.GetPlatforms)
 
 		r.Group(func(r chi.Router) {
-			r.Use(api.RateLimitMiddleware(valkeyClient, 20, time.Minute))
+			r.Use(api.RateLimitMiddleware(valkeyClient, 60, time.Minute))
 			r.Get("/auth/calendar/validate", handlers.ValidateCalendarAccess)
 		})
 
