@@ -25,13 +25,13 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 
 | Platform | Scraper/API Type | Fetch Payload Format | Update Frequency | Rate Limit Strategy |
 | :--- | :--- | :--- | :--- | :--- |
-| **LeetCode** | GraphQL Endpoint | JSON Query Payload | Every 30m Cron | Dynamic Backoff + Retries |
-| **Codeforces** | REST API Filter | HTTP JSON Response | Every 30m Cron | Local Token Bucket Gating |
-| **CodeChef** | REST API Fetcher | Nested JSON Payload | Every 30m Cron | Session Connection Pool |
-| **AtCoder** | HTML Scraper | DOM Node Parsing | Every 30m Cron | Strict User Agent Gating |
-| **HackerRank** | REST API Fetcher | Flat JSON Document | Every 30m Cron | Secure Host Verification |
-| **GeeksforGeeks**| REST API Parser | Raw JSON Payload | Every 30m Cron | Bounded Payload Capping |
-| **Naukri Code360**| REST API Parser | Structured JSON Array | Every 30m Cron | Dynamic Event Mapping |
+| **LeetCode** | GraphQL Endpoint | JSON Query Payload | On startup, then every 30m | Dynamic Backoff + Retries |
+| **Codeforces** | REST API Filter | HTTP JSON Response | On startup, then every 30m | Local Token Bucket Gating |
+| **CodeChef** | REST API Fetcher | Nested JSON Payload | On startup, then every 30m | Session Connection Pool |
+| **AtCoder** | HTML Scraper | DOM Node Parsing | On startup, then every 30m | Strict User Agent Gating |
+| **HackerRank** | REST API Fetcher | Flat JSON Document | On startup, then every 30m | Secure Host Verification |
+| **GeeksforGeeks**| REST API Parser | Raw JSON Payload | On startup, then every 30m | Bounded Payload Capping |
+| **Naukri Code360**| REST API Parser | Structured JSON Array | On startup, then every 30m | Dynamic Event Mapping |
 
 ---
 
@@ -46,11 +46,13 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 ## Core SaaS & Enterprise Capabilities
 
 ### 1. High-Concurrency CloudAMQP LavinMQ Queue Engine
+
 * **Ultra-Light & Blazing Fast**: Powered by CloudAMQP LavinMQ (AMQP 0.9.1), handling up to 40 parallel connection slots per instance with near-zero idle memory footprint (~15MB RAM).
-* **Transparent Fallback**: Automatic, zero-configuration fallback to thread-safe in-memory channels (`chan`) when `CLOUDAMQP_URL` is omitted.
+* **Transparent Fallback**: Automatic, zero-configuration fallback to thread-safe in-memory channels (`chan`) when `CLOUDAMQP_URL` is omitted. When neither is configured, tasks run in-memory and unconsumed in-flight tasks may be lost on process restart.
 * **Persistent Task Queuing**: Manages persistent `extraction-tasks` and `sync-tasks` queues with automatic retry handling.
 
 ### 2. High-Concurrency Neon DB Read/Write Split Engine
+
 * **Isolation of Concerns**: Database operations are split into separate Write Primary and multiple Read Replica connection pools.
 * **Atomic Round-Robin Distribution**: Reads are distributed across replicas using lock-free atomic round-robin counters, utilizing the Neon DB pool endpoints for high performance.
 * **Massive Concurrency Support**: Integrates PgBouncer configurations, allowing up to 10,000 concurrent pooled connections per read replica, while direct connections are preserved for write paths and migrations.
@@ -68,15 +70,17 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 | **IP Rate Limiter** | `limit:<ip_address>:<window>` | Variable (Dynamic) | Auto-Expires on window end | Numeric string counter |
 | **User Sessions** | `session:<session_id>` | 7 Days | Account logout | Encoded Gorilla Session |
 
-### 4. Live Calendar Scope Validation & 24h Ungranted User Pruning
-* **Live Scope Verification**: `GET /auth/calendar/validate` runs real-time `srv.Calendars.Get("primary")` checks to verify users granted full Google Calendar read/write access.
+### 4. Cached Calendar Scope Validation & 24h Ungranted User Pruning
+
+* **Cached Scope Verification**: `GET /auth/calendar/validate` checks user Google Calendar access and caches validation status in Valkey for up to 5 minutes (`user:cal_val:<userID>`), invalidated instantly on OAuth login or token revoke.
 * **Frontend Warning State**: Displays explicit **Google Calendar Access Missing** alerts for missing/revoked tokens and **Temporary Calendar Service Issues** for API outages.
 * **24-Hour Automated Cleanup**: Background cron task automatically deletes accounts with ungranted tokens (`refresh_token IS NULL`) after 24 hours to prevent orphan DB records.
 
 ### 5. Real-Time Contest Overwrite & Obsolete Contest Pruning
+
 * **Dynamic Pruning**: When scrapers run, a cleanup operation is executed: `DELETE FROM contests WHERE platform = $1 AND start_time > NOW() AND id != ALL($2)`. This deletes upcoming contests that were rescheduled or cancelled on the host platform.
 * **Boundary Integrity**: The prune query is locked to upcoming contests (`start_time > NOW()`). This preserves past contests and their synced events, preventing redundant event syncs or double-syncing.
-* **Safe Overwrite**: If a scrape returns zero upcoming contests, future scheduled entries for that platform are preserved to protect against API blocks.
+* **Safe Overwrite**: If a scrape returns zero upcoming contests, future scheduled entries for that platform are preserved to protect against API blocks or temporary empty responses.
 
 ---
 
@@ -89,12 +93,12 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 | `CONNECTION_LIMIT` | Maximum connections allowed in Primary Write pool | `800` | `20` |
 | `CONNECTION_POOL_LIMIT`| Maximum connections allowed per Read Replica Pool | `10000` | `100` |
 | `VALKEY_URI` | Connection URI string for Valkey instance | None | `rediss://default:password@host:port` |
-| `CLOUDAMQP_URL` / `AMQP_URL` | AMQP 0.9.1 connection URL for CloudAMQP LavinMQ | None (In-memory fallback) | `amqps://user:pass@lemming.rmq.cloudamqp.com/vhost` |
+| `CLOUDAMQP_URL` / `AMQP_URL` | AMQP 0.9.1 connection URL for CloudAMQP LavinMQ (fallback: in-memory) | None | `amqps://user:pass@lemming.rmq.cloudamqp.com/vhost` |
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 Web Application Client ID from Google Cloud Console | None | `abc-123.apps.googleusercontent.com` |
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 Web Application Client Secret from Google Cloud Console | None | `sec_code_xyz` |
 | `GOOGLE_REDIRECT_URL` | Redirect Callback URL registered in Google API credentials | None | `http://localhost:8080/auth/google/callback` |
-| `SESSION_SECRET` | 32-byte hex-encoded key for Gorilla Cookie / Valkey Sessions | None | `d3b07384d113edec49eaa6238ad5ff00` |
-| `ENCRYPTION_KEY` | 32-byte hex-encoded key for AES Refresh Token encryption | None | `2d9bb20065718dfdc0237af8ad3ff49a` |
+| `SESSION_SECRET` | 32-byte (64 hex characters) key for Gorilla Cookie / Valkey Sessions | None | `d3b07384d113edec49eaa6238ad5ff00112233445566778899aabbccddeeff00` |
+| `ENCRYPTION_KEY` | 32-byte (64 hex characters) key for AES Refresh Token encryption | None | `2d9bb20065718dfdc0237af8ad3ff49a112233445566778899aabbccddeeff00` |
 | `ADMIN_PASSWORD` | Standard password for admin panel authentication | None | `adm_pwd_secure` |
 | `TRUST_PROXY` | Gated verification trust toggle for client IP forwarding | `false` | `true` |
 | `TELEGRAM_PROXY_URL` | Outbound Proxy target for forwarding warnings/errors | None | `https://tg-proxy.myorg.workers.dev` |

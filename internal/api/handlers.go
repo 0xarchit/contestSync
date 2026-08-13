@@ -258,6 +258,10 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/preferences", http.StatusSeeOther)
 }
 
+func CalendarValidationCacheKey(userID int) string {
+	return fmt.Sprintf("user:cal_val:%d", userID)
+}
+
 func (h *Handlers) ValidateCalendarAccess(w http.ResponseWriter, r *http.Request) {
 	val := r.Context().Value(ContextKeyUserID)
 	if val == nil {
@@ -266,7 +270,7 @@ func (h *Handlers) ValidateCalendarAccess(w http.ResponseWriter, r *http.Request
 	}
 	userID := val.(int)
 
-	cacheKey := fmt.Sprintf("user:cal_val:%d", userID)
+	cacheKey := CalendarValidationCacheKey(userID)
 	if h.Valkey != nil {
 		cachedVal, err := h.Valkey.Get(r.Context(), cacheKey).Result()
 		if err == nil && cachedVal != "" {
@@ -277,8 +281,13 @@ func (h *Handlers) ValidateCalendarAccess(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	readPool := h.ReadDB
+	if readPool == nil {
+		readPool = h.DB
+	}
+
 	var encryptedRefreshToken string
-	err := h.DB.QueryRow(r.Context(), "SELECT refresh_token FROM users WHERE id = $1", userID).Scan(&encryptedRefreshToken)
+	err := readPool.QueryRow(r.Context(), "SELECT refresh_token FROM users WHERE id = $1", userID).Scan(&encryptedRefreshToken)
 	if err != nil || encryptedRefreshToken == "" {
 		res := map[string]any{
 			"valid":      false,
@@ -303,11 +312,11 @@ func (h *Handlers) ValidateCalendarAccess(w http.ResponseWriter, r *http.Request
 	tokenSource := h.AuthProvider.Config.TokenSource(r.Context(), &oauth2.Token{RefreshToken: refreshToken})
 	srv, err := calendar.NewService(r.Context(), option.WithTokenSource(tokenSource))
 	if err != nil {
+		slog.Error("failed to create calendar service in validation handler", "user_id", userID, "error", err)
 		res := map[string]any{
 			"valid":      false,
 			"code":       "operational_failure",
 			"error_type": "calendar_service_error",
-			"details":    err.Error(),
 		}
 		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 1*time.Minute)
 		return
@@ -315,17 +324,26 @@ func (h *Handlers) ValidateCalendarAccess(w http.ResponseWriter, r *http.Request
 
 	_, err = srv.Calendars.Get("primary").Do()
 	if err != nil {
+		slog.Warn("calendar access check returned error", "user_id", userID, "error", err)
 		code := "operational_failure"
-		if gErr, ok := err.(*googleapi.Error); ok {
+
+		var gErr *googleapi.Error
+		var rErr *oauth2.RetrieveError
+
+		if errors.As(err, &gErr) {
 			if gErr.Code == http.StatusUnauthorized || gErr.Code == http.StatusForbidden {
 				code = "credential_failure"
 			}
+		} else if errors.As(err, &rErr) {
+			if rErr.ErrorCode == "invalid_grant" {
+				code = "credential_failure"
+			}
 		}
+
 		res := map[string]any{
 			"valid":      false,
 			"code":       code,
 			"error_type": "calendar_api_error",
-			"details":    err.Error(),
 		}
 		ttl := 5 * time.Minute
 		if code == "operational_failure" {
@@ -343,9 +361,15 @@ func (h *Handlers) ValidateCalendarAccess(w http.ResponseWriter, r *http.Request
 }
 
 func writeJSONAndCache(w http.ResponseWriter, r *http.Request, rdb *redis.Client, cacheKey string, payload map[string]any, ttl time.Duration) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		slog.Error("failed to marshal JSON response", "error", err)
+		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	data, _ := json.Marshal(payload)
 	w.Write(data)
 	if rdb != nil && cacheKey != "" {
 		rdb.Set(r.Context(), cacheKey, string(data), ttl)
@@ -800,6 +824,15 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func escapeICalText(text string) string {
+	text = strings.ReplaceAll(text, "\\", "\\\\")
+	text = strings.ReplaceAll(text, ";", "\\;")
+	text = strings.ReplaceAll(text, ",", "\\,")
+	text = strings.ReplaceAll(text, "\n", "\\n")
+	text = strings.ReplaceAll(text, "\r", "")
+	return text
+}
+
 func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
 	userIDStr := r.URL.Query().Get("user_id")
 	if userIDStr == "" {
@@ -833,12 +866,14 @@ func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
 		platforms = extractor.Platforms
 	}
 
-	rows, err := readPool.Query(r.Context(), "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW() - INTERVAL '7 days' ORDER BY start_time ASC", platforms)
+	rows, err := readPool.Query(r.Context(), "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW() - INTERVAL '7 days' AND start_time < NOW() + INTERVAL '60 days' ORDER BY start_time ASC LIMIT 500", platforms)
 	if err != nil {
 		http.Error(w, "failed to query contests", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
+
+	nowStamp := time.Now().UTC().Format("20060102T150405Z")
 
 	var buf strings.Builder
 	buf.WriteString("BEGIN:VCALENDAR\r\n")
@@ -854,31 +889,38 @@ func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		cleanName := strings.ReplaceAll(c.Name, "\n", " ")
-		cleanName = strings.ReplaceAll(cleanName, ";", "\\;")
-		cleanName = strings.ReplaceAll(cleanName, ",", "\\,")
+		escapedSummary := escapeICalText(fmt.Sprintf("[%s] %s", strings.ToUpper(c.Platform), c.Name))
+		escapedDesc := escapeICalText(fmt.Sprintf("Platform: %s\nURL: %s\n\nSynced by ContestSync", c.Platform, c.URL))
+		escapedLoc := escapeICalText(c.URL)
 
-		buf.WriteString("BEGIN:VEVENT\r\n")
-		buf.WriteString(fmt.Sprintf("UID:%s@contestsync.app\r\n", c.ID))
-		buf.WriteString(fmt.Sprintf("SUMMARY:[%s] %s\r\n", strings.ToUpper(c.Platform), cleanName))
-		buf.WriteString(fmt.Sprintf("DESCRIPTION:Platform: %s\\nURL: %s\\n\\nSynced by ContestSync\r\n", c.Platform, c.URL))
-		buf.WriteString(fmt.Sprintf("URL:%s\r\n", c.URL))
-		buf.WriteString(fmt.Sprintf("LOCATION:%s\r\n", c.URL))
-		buf.WriteString(fmt.Sprintf("DTSTART:%s\r\n", c.StartTime.UTC().Format("20060102T150405Z")))
-		buf.WriteString(fmt.Sprintf("DTEND:%s\r\n", c.EndTime.UTC().Format("20060102T150405Z")))
-		buf.WriteString("BEGIN:VALARM\r\n")
-		buf.WriteString("TRIGGER:-PT30M\r\n")
-		buf.WriteString("ACTION:DISPLAY\r\n")
-		buf.WriteString("DESCRIPTION:Reminder\r\n")
-		buf.WriteString("END:VALARM\r\n")
-		buf.WriteString("END:VEVENT\r\n")
+		fmt.Fprintf(&buf, "BEGIN:VEVENT\r\n")
+		fmt.Fprintf(&buf, "UID:%s@contestsync.app\r\n", c.ID)
+		fmt.Fprintf(&buf, "DTSTAMP:%s\r\n", nowStamp)
+		fmt.Fprintf(&buf, "SUMMARY:%s\r\n", escapedSummary)
+		fmt.Fprintf(&buf, "DESCRIPTION:%s\r\n", escapedDesc)
+		fmt.Fprintf(&buf, "URL:%s\r\n", c.URL)
+		fmt.Fprintf(&buf, "LOCATION:%s\r\n", escapedLoc)
+		fmt.Fprintf(&buf, "DTSTART:%s\r\n", c.StartTime.UTC().Format("20060102T150405Z"))
+		fmt.Fprintf(&buf, "DTEND:%s\r\n", c.EndTime.UTC().Format("20060102T150405Z"))
+		fmt.Fprintf(&buf, "BEGIN:VALARM\r\n")
+		fmt.Fprintf(&buf, "TRIGGER:-PT30M\r\n")
+		fmt.Fprintf(&buf, "ACTION:DISPLAY\r\n")
+		fmt.Fprintf(&buf, "DESCRIPTION:Reminder\r\n")
+		fmt.Fprintf(&buf, "END:VALARM\r\n")
+		fmt.Fprintf(&buf, "END:VEVENT\r\n")
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("error during contest row iteration in iCal feed", "user_id", userID, "error", err)
+		http.Error(w, "error generating feed", http.StatusInternalServerError)
+		return
 	}
 
 	buf.WriteString("END:VCALENDAR\r\n")
 
 	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
 	w.Header().Set("Content-Disposition", "inline; filename=\"contestsync.ics\"")
-	w.Header().Set("Cache-Control", "public, max-age=1800")
+	w.Header().Set("Cache-Control", "private, no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(buf.String()))
 }

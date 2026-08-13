@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/0xarchit/contestsync/config"
+	"github.com/0xarchit/contestsync/internal/extractor"
 )
 
 func TestInMemoryQueuePublish(t *testing.T) {
@@ -76,7 +77,15 @@ func TestHandleExtractionZeroContests(t *testing.T) {
 		t.Fatalf("failed to create queue: %v", err)
 	}
 
-	if err := q.Health(context.Background()); err != nil {
+	ctx := context.Background()
+	if err := q.Health(ctx); err != nil {
 		t.Errorf("expected queue health to be nil, got: %v", err)
 	}
+
+	extractor.Fetchers["mock_zero"] = func() ([]extractor.Contest, error) {
+		return []extractor.Contest{}, nil
+	}
+	defer delete(extractor.Fetchers, "mock_zero")
+
+	q.handleExtraction(ctx, "mock_zero")
 }
