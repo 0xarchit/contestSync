@@ -91,12 +91,18 @@ func main() {
 		EncryptionKey: cfg.EncryptionKey,
 		Valkey:        valkeyClient,
 	}
+	if tgManager != nil {
+		syncer.OnTelegramEvent = tgManager.TriggerSystemEvent
+	}
 
 	q, err := queue.New(cfg, pool.WriteDB(), syncer)
 	if err != nil {
-		log.Fatalf("failed to initialize kafka queue: %v", err)
+		log.Fatalf("failed to initialize queue: %v", err)
 	}
 	defer q.Close()
+	if tgManager != nil {
+		q.OnTelegramEvent = tgManager.TriggerSystemEvent
+	}
 	q.StartConsumers(shutdownCtx, cfg)
 
 	mux := http.NewServeMux()

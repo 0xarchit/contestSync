@@ -24,12 +24,13 @@ import (
 )
 
 type Syncer struct {
-	DB            *pgxpool.Pool
-	ReadDB        *pgxpool.Pool
-	AuthProvider  *auth.Provider
-	EncryptionKey []byte
-	Valkey        *redis.Client
-	syncingUsers  sync.Map
+	DB              *pgxpool.Pool
+	ReadDB          *pgxpool.Pool
+	AuthProvider    *auth.Provider
+	EncryptionKey   []byte
+	Valkey          *redis.Client
+	OnTelegramEvent func(event, details string)
+	syncingUsers    sync.Map
 }
 
 func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
@@ -116,6 +117,15 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 			cacheKey := fmt.Sprintf("user:last_sync_at:%d", userID)
 			if err := s.Valkey.Set(context.Background(), cacheKey, time.Now().Format(time.RFC3339), 1*time.Hour).Err(); err != nil {
 				slog.Error("failed to update last sync time cache", "user_id", userID, "error", err)
+			}
+		}
+		if s.OnTelegramEvent != nil {
+			if status == "success" {
+				msg := fmt.Sprintf("🔄 <b>[USER CALENDAR SYNCED]</b>\n\nUser ID: <b>%d</b>\nEmail: <b>%s</b>\nCalendar ID: <code>%s</code>\nStatus: ✅ <b>Success</b>", userID, EscapeTelegramHTML(user.Email), EscapeTelegramHTML(user.CalendarID))
+				s.OnTelegramEvent("USER_SYNC_SUCCESS", msg)
+			} else {
+				msg := fmt.Sprintf("⚠️ <b>[USER CALENDAR SYNC FAILED]</b>\n\nUser ID: <b>%d</b>\nEmail: <b>%s</b>\nError: <code>%s</code>", userID, EscapeTelegramHTML(user.Email), EscapeTelegramHTML(retErr.Error()))
+				s.OnTelegramEvent("USER_SYNC_FAILURE", msg)
 			}
 		}
 	}()
@@ -472,4 +482,11 @@ func (s *Syncer) handleSyncError(ctx context.Context, userID int, err error) (bo
 		return true, nil
 	}
 	return false, err
+}
+
+func EscapeTelegramHTML(text string) string {
+	text = strings.ReplaceAll(text, "&", "&amp;")
+	text = strings.ReplaceAll(text, "<", "&lt;")
+	text = strings.ReplaceAll(text, ">", "&gt;")
+	return text
 }
