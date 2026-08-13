@@ -129,8 +129,8 @@
           <p style="color: var(--text-secondary); margin: 0 0 1rem 0; font-size: 0.85rem; line-height: 1.4;">
             Subscribe via Apple Calendar, Outlook, Notion, or Thunderbird using your secure unguessable feed token.
           </p>
-          <div style="display: flex; gap: 0.75rem;">
-            <input type="text" id="ical-feed-input" readonly placeholder="Loading private iCal feed link..." style="flex: 1; padding: 0.65rem 0.9rem; background: rgba(0,0,0,0.3); border: 1px solid var(--bg-border); border-radius: 8px; color: var(--text-primary); font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem;" />
+          <div class="ical-feed-box-inner" style="display: flex; gap: 0.75rem;">
+            <input type="text" id="ical-feed-input" readonly placeholder="Loading private iCal feed link..." style="flex: 1; min-width: 0; width: 100%; padding: 0.65rem 0.9rem; background: rgba(0,0,0,0.3); border: 1px solid var(--bg-border); border-radius: 8px; color: var(--text-primary); font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem;" />
             <button type="button" id="copy-ical-btn" class="btn btn-secondary" style="white-space: nowrap; font-size: 0.85rem; padding: 0.65rem 1.2rem;">Copy Feed Link</button>
           </div>
           <span id="copy-ical-status" style="display: block; margin-top: 0.5rem; font-size: 0.8rem; color: var(--accent-primary); font-weight: 500;"></span>

@@ -1635,6 +1635,13 @@ details[open] .faq-a {
   section {
     padding-block: 3rem;
   }
+  .ical-feed-box-inner {
+    flex-direction: column !important;
+  }
+  header div {
+    flex-wrap: wrap;
+    gap: 0.5rem !important;
+  }
 }
 @media (max-width: 380px) {
   .logo img {
