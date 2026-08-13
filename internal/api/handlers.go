@@ -91,6 +91,45 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	readPool := h.ReadDB
+	if readPool == nil {
+		readPool = h.DB
+	}
+
+	var encryptedRefreshToken string
+	if err := readPool.QueryRow(r.Context(), "SELECT refresh_token FROM users WHERE id = $1", userID).Scan(&encryptedRefreshToken); err != nil || encryptedRefreshToken == "" {
+		http.Error(w, `{"error":"calendar access permission missing"}`, http.StatusForbidden)
+		return
+	}
+
+	refreshToken, err := auth.DecryptToken(encryptedRefreshToken, h.EncryptionKey)
+	if err != nil || refreshToken == "" {
+		http.Error(w, `{"error":"invalid refresh token"}`, http.StatusForbidden)
+		return
+	}
+
+	valCtx, valCancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer valCancel()
+	tokenSource := h.AuthProvider.Config.TokenSource(valCtx, &oauth2.Token{RefreshToken: refreshToken})
+	tok, tokErr := tokenSource.Token()
+	if tokErr != nil {
+		http.Error(w, `{"error":"google calendar permission revoked"}`, http.StatusForbidden)
+		return
+	}
+
+	req, _ := http.NewRequestWithContext(valCtx, http.MethodGet, "https://oauth2.googleapis.com/tokeninfo?access_token="+tok.AccessToken, nil)
+	resp, reqErr := http.DefaultClient.Do(req)
+	if reqErr == nil {
+		defer resp.Body.Close()
+		var info struct {
+			Scope string `json:"scope"`
+		}
+		if json.NewDecoder(resp.Body).Decode(&info) == nil && !strings.Contains(info.Scope, "https://www.googleapis.com/auth/calendar") {
+			http.Error(w, `{"error":"google calendar permission scope missing"}`, http.StatusForbidden)
+			return
+		}
+	}
+
 	if err := h.Queue.PublishSyncTask(r.Context(), userID); err != nil {
 		slog.Error("manual sync queuing failed", "user_id", userID, "error", err)
 		http.Error(w, `{"error":"sync failed to queue"}`, http.StatusInternalServerError)
