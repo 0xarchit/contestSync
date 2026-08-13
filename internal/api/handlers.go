@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -427,29 +428,34 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var user struct {
+	hSum := sha256.Sum256([]byte(fmt.Sprintf("%dical_feed_secret", cachedUser.ID)))
+	feedToken := hex.EncodeToString(hSum[:])
+
+	var userResp struct {
 		models.User
 		Platforms           []string `json:"platforms"`
 		CSRFToken           string   `json:"csrf_token"`
 		RefreshTokenMissing bool     `json:"refresh_token_missing"`
+		ICalFeedURL         string   `json:"ical_feed_url"`
 	}
-	user.ID = cachedUser.ID
-	user.GoogleID = cachedUser.GoogleID
-	user.Email = cachedUser.Email
-	user.CalendarID = cachedUser.CalendarID
-	user.UseDedicated = cachedUser.UseDedicated
-	user.Platforms = cachedUser.Platforms
-	user.RefreshTokenMissing = cachedUser.RefreshToken == ""
+	userResp.ID = cachedUser.ID
+	userResp.GoogleID = cachedUser.GoogleID
+	userResp.Email = cachedUser.Email
+	userResp.CalendarID = cachedUser.CalendarID
+	userResp.UseDedicated = cachedUser.UseDedicated
+	userResp.Platforms = cachedUser.Platforms
+	userResp.RefreshTokenMissing = cachedUser.RefreshToken == ""
+	userResp.ICalFeedURL = fmt.Sprintf("/feed/ical?token=%s", feedToken)
 
 	session, err := h.SessionStore.Get(r, "session")
 	if err == nil {
 		if csrf, ok := session.Values["csrf_token"].(string); ok {
-			user.CSRFToken = csrf
+			userResp.CSRFToken = csrf
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	json.NewEncoder(w).Encode(userResp)
 }
 
 func (h *Handlers) DeleteAccount(w http.ResponseWriter, r *http.Request) {
@@ -834,17 +840,8 @@ func escapeICalText(text string) string {
 }
 
 func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
 	userIDStr := r.URL.Query().Get("user_id")
-	if userIDStr == "" {
-		http.Error(w, "missing user_id parameter", http.StatusBadRequest)
-		return
-	}
-
-	var userID int
-	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil || userID <= 0 {
-		http.Error(w, "invalid user_id", http.StatusBadRequest)
-		return
-	}
 
 	readPool := h.ReadDB
 	if readPool == nil {
@@ -852,10 +849,25 @@ func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var platforms []string
-	err := readPool.QueryRow(r.Context(), "SELECT platforms FROM users WHERE id = $1", userID).Scan(&platforms)
+	var err error
+
+	if token != "" {
+		err = readPool.QueryRow(r.Context(), "SELECT platforms FROM users WHERE encode(digest(cast(id as text) || 'ical_feed_secret', 'sha256'), 'hex') = $1 OR cast(id as text) = $1", token).Scan(&platforms)
+	} else if userIDStr != "" {
+		var userID int
+		if _, parseErr := fmt.Sscanf(userIDStr, "%d", &userID); parseErr != nil || userID <= 0 {
+			http.Error(w, "invalid request parameter", http.StatusBadRequest)
+			return
+		}
+		err = readPool.QueryRow(r.Context(), "SELECT platforms FROM users WHERE id = $1", userID).Scan(&platforms)
+	} else {
+		http.Error(w, "missing feed token", http.StatusBadRequest)
+		return
+	}
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "user not found", http.StatusNotFound)
+			http.Error(w, "feed not found", http.StatusNotFound)
 			return
 		}
 		http.Error(w, "database error", http.StatusInternalServerError)
@@ -911,7 +923,7 @@ func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
-		slog.Error("error during contest row iteration in iCal feed", "user_id", userID, "error", err)
+		slog.Error("error during contest row iteration in iCal feed", "error", err)
 		http.Error(w, "error generating feed", http.StatusInternalServerError)
 		return
 	}
