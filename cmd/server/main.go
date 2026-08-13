@@ -134,6 +134,7 @@ func main() {
 		log.Fatalf("failed to initialize queue: %v", err)
 	}
 	defer q.Close()
+	q.OTel = otelMetrics
 	if tgManager != nil {
 		q.OnTelegramEvent = tgManager.TriggerSystemEvent
 	}

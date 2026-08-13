@@ -9,9 +9,11 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
@@ -87,6 +89,22 @@ func InitOTel(serviceName string) *OTelMetrics {
 		return nil
 	}
 
+	traceOpts := []otlptracehttp.Option{
+		otlptracehttp.WithEndpoint(trimmedEndpoint),
+		otlptracehttp.WithURLPath("/v1/traces"),
+	}
+	if strings.HasPrefix(endpoint, "http://") {
+		traceOpts = append(traceOpts, otlptracehttp.WithInsecure())
+	}
+	if len(headers) > 0 {
+		traceOpts = append(traceOpts, otlptracehttp.WithHeaders(headers))
+	}
+
+	traceExporter, err := otlptracehttp.New(ctx, traceOpts...)
+	if err != nil {
+		slog.Error("failed to create OTLP trace exporter", "error", err)
+	}
+
 	res, err := resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
@@ -104,6 +122,15 @@ func InitOTel(serviceName string) *OTelMetrics {
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(15*time.Second))),
 	)
 	otel.SetMeterProvider(provider)
+
+	var tracerProvider *sdktrace.TracerProvider
+	if traceExporter != nil {
+		tracerProvider = sdktrace.NewTracerProvider(
+			sdktrace.WithResource(res),
+			sdktrace.WithBatcher(traceExporter),
+		)
+		otel.SetTracerProvider(tracerProvider)
+	}
 
 	meter := provider.Meter("contestsync")
 
@@ -124,7 +151,7 @@ func InitOTel(serviceName string) *OTelMetrics {
 		metric.WithDescription("Total calendar access validation checks"),
 	)
 
-	slog.Info("OpenTelemetry OTLP push metric exporter initialized successfully", "endpoint", trimmedEndpoint, "service", serviceName)
+	slog.Info("OpenTelemetry OTLP push exporter initialized successfully", "endpoint", trimmedEndpoint, "service", serviceName)
 
 	return &OTelMetrics{
 		Meter:                   meter,
@@ -132,6 +159,12 @@ func InitOTel(serviceName string) *OTelMetrics {
 		SyncDurationHistogram:   syncDuration,
 		SyncCounter:             syncCounter,
 		CalendarValidateCounter: validateCounter,
-		Shutdown:                provider.Shutdown,
+		Shutdown: func(ctx context.Context) error {
+			_ = provider.Shutdown(ctx)
+			if tracerProvider != nil {
+				_ = tracerProvider.Shutdown(ctx)
+			}
+			return nil
+		},
 	}
 }

@@ -11,11 +11,14 @@ import (
 
 	"github.com/0xarchit/contestsync/config"
 	"github.com/0xarchit/contestsync/internal/extractor"
+	"github.com/0xarchit/contestsync/internal/observability"
 	"github.com/0xarchit/contestsync/internal/sync"
 	"github.com/0xarchit/contestsync/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -36,6 +39,7 @@ type Queue struct {
 	AMQPChannel     *amqp.Channel
 	DB              *pgxpool.Pool
 	Syncer          *sync.Syncer
+	OTel            *observability.OTelMetrics
 	useInMemory     bool
 	extractionCh    chan string
 	syncCh          chan int
@@ -407,6 +411,9 @@ func (q *Queue) logDatabaseContestsTelemetry(ctx context.Context) {
 			platformCounts = append(platformCounts, plat, count)
 			fmt.Fprintf(&summaryText, "• <b>%s</b>: %d contest(s)\n", plat, count)
 			totalContests += count
+			if q.OTel != nil && q.OTel.ExtractionCounter != nil {
+				q.OTel.ExtractionCounter.Add(ctx, int64(count), metric.WithAttributes(attribute.String("platform", plat)))
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
