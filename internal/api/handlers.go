@@ -310,47 +310,51 @@ func (h *Handlers) ValidateCalendarAccess(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	tokenSource := h.AuthProvider.Config.TokenSource(r.Context(), &oauth2.Token{RefreshToken: refreshToken})
-	srv, err := calendar.NewService(r.Context(), option.WithTokenSource(tokenSource))
+	valCtx, valCancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer valCancel()
+
+	tokenSource := h.AuthProvider.Config.TokenSource(valCtx, &oauth2.Token{RefreshToken: refreshToken})
+	tok, err := tokenSource.Token()
 	if err != nil {
-		slog.Error("failed to create calendar service in validation handler", "user_id", userID, "error", err)
+		slog.Warn("refresh token exchange failed in validation handler", "user_id", userID, "error", err)
 		res := map[string]any{
 			"valid":      false,
-			"code":       "operational_failure",
-			"error_type": "calendar_service_error",
+			"code":       "credential_failure",
+			"error_type": "invalid_grant",
 		}
+		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 15*time.Minute)
+		return
+	}
+
+	req, err := http.NewRequestWithContext(valCtx, http.MethodGet, "https://oauth2.googleapis.com/tokeninfo?access_token="+tok.AccessToken, nil)
+	if err != nil {
+		res := map[string]any{"valid": false, "code": "operational_failure", "error_type": "request_creation_failed"}
 		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 1*time.Minute)
 		return
 	}
 
-	_, err = srv.Calendars.Get("primary").Do()
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		slog.Warn("calendar access check returned error", "user_id", userID, "error", err)
-		code := "operational_failure"
+		slog.Warn("tokeninfo request failed", "user_id", userID, "error", err)
+		res := map[string]any{"valid": false, "code": "operational_failure", "error_type": "tokeninfo_network_error"}
+		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 1*time.Minute)
+		return
+	}
+	defer resp.Body.Close()
 
-		var gErr *googleapi.Error
-		var rErr *oauth2.RetrieveError
+	if resp.StatusCode != http.StatusOK {
+		res := map[string]any{"valid": false, "code": "credential_failure", "error_type": "token_invalid"}
+		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 15*time.Minute)
+		return
+	}
 
-		if errors.As(err, &gErr) {
-			if gErr.Code == http.StatusUnauthorized || gErr.Code == http.StatusForbidden {
-				code = "credential_failure"
-			}
-		} else if errors.As(err, &rErr) {
-			if rErr.ErrorCode == "invalid_grant" {
-				code = "credential_failure"
-			}
-		}
-
-		res := map[string]any{
-			"valid":      false,
-			"code":       code,
-			"error_type": "calendar_api_error",
-		}
-		ttl := 5 * time.Minute
-		if code == "operational_failure" {
-			ttl = 1 * time.Minute
-		}
-		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, ttl)
+	var info struct {
+		Scope string `json:"scope"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil || !strings.Contains(info.Scope, "https://www.googleapis.com/auth/calendar") {
+		slog.Warn("calendar scope missing in tokeninfo", "user_id", userID, "scope", info.Scope)
+		res := map[string]any{"valid": false, "code": "credential_failure", "error_type": "missing_calendar_scope"}
+		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 15*time.Minute)
 		return
 	}
 
@@ -358,7 +362,7 @@ func (h *Handlers) ValidateCalendarAccess(w http.ResponseWriter, r *http.Request
 		"valid": true,
 		"code":  "success",
 	}
-	writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 5*time.Minute)
+	writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 15*time.Minute)
 }
 
 func writeJSONAndCache(w http.ResponseWriter, r *http.Request, rdb *redis.Client, cacheKey string, payload map[string]any, ttl time.Duration) {
