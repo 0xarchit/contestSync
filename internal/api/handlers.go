@@ -371,9 +371,9 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 
 	var user struct {
 		models.User
-		Platforms            []string `json:"platforms"`
-		CSRFToken            string   `json:"csrf_token"`
-		RefreshTokenMissing  bool     `json:"refresh_token_missing"`
+		Platforms           []string `json:"platforms"`
+		CSRFToken           string   `json:"csrf_token"`
+		RefreshTokenMissing bool     `json:"refresh_token_missing"`
 	}
 	user.ID = cachedUser.ID
 	user.GoogleID = cachedUser.GoogleID

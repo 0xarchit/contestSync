@@ -4,7 +4,7 @@ CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     google_id TEXT UNIQUE NOT NULL,
     email TEXT NOT NULL,
-    refresh_token TEXT NOT NULL,
+    refresh_token TEXT,
     calendar_id TEXT,
     use_dedicated BOOLEAN NOT NULL DEFAULT FALSE,
     platforms TEXT[] DEFAULT '{}' CHECK (platforms <@ ARRAY['leetcode', 'codeforces', 'codechef', 'atcoder', 'hackerrank', 'geeksforgeeks', 'code360']::text[]),
