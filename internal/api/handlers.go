@@ -852,7 +852,32 @@ func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	if token != "" {
-		err = readPool.QueryRow(r.Context(), "SELECT platforms FROM users WHERE encode(digest(cast(id as text) || 'ical_feed_secret', 'sha256'), 'hex') = $1 OR cast(id as text) = $1", token).Scan(&platforms)
+		rows, qErr := readPool.Query(r.Context(), "SELECT id, platforms FROM users")
+		if qErr != nil {
+			slog.Error("failed to query users for ical feed token verification", "error", qErr)
+			http.Error(w, "database error", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		found := false
+		for rows.Next() {
+			var uID int
+			var pList []string
+			if err := rows.Scan(&uID, &pList); err == nil {
+				hSum := sha256.Sum256([]byte(fmt.Sprintf("%dical_feed_secret", uID)))
+				computedToken := hex.EncodeToString(hSum[:])
+				if computedToken == token || fmt.Sprintf("%d", uID) == token {
+					platforms = pList
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			http.Error(w, "feed not found", http.StatusNotFound)
+			return
+		}
 	} else if userIDStr != "" {
 		var userID int
 		if _, parseErr := fmt.Sscanf(userIDStr, "%d", &userID); parseErr != nil || userID <= 0 {
@@ -860,17 +885,16 @@ func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		err = readPool.QueryRow(r.Context(), "SELECT platforms FROM users WHERE id = $1", userID).Scan(&platforms)
-	} else {
-		http.Error(w, "missing feed token", http.StatusBadRequest)
-		return
-	}
-
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "feed not found", http.StatusNotFound)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				http.Error(w, "feed not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "database error", http.StatusInternalServerError)
 			return
 		}
-		http.Error(w, "database error", http.StatusInternalServerError)
+	} else {
+		http.Error(w, "missing feed token", http.StatusBadRequest)
 		return
 	}
 
