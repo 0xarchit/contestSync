@@ -53,6 +53,11 @@ func main() {
 		defer tgManager.Drain()
 	}
 
+	otelMetrics := observability.InitOTel("contestsync-worker")
+	if otelMetrics != nil && otelMetrics.Shutdown != nil {
+		defer otelMetrics.Shutdown(context.Background())
+	}
+
 	if len(cfg.EncryptionKey) != 32 {
 		log.Fatal("ENCRYPTION_KEY must be exactly 32 bytes")
 	}
