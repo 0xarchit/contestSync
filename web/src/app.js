@@ -330,12 +330,16 @@ async function initPreferences() {
           cb.checked = existingPlatforms.includes(cb.value);
         });
       }
+      let hasCalendarAccess = true;
 
       // Deferred non-blocking validation check after UI is fully responsive
       setTimeout(async () => {
+        let submitBtn = document.querySelector('#pref-form button[type="submit"]');
         if (me.refresh_token_missing) {
+          hasCalendarAccess = false;
           let warningEl = document.getElementById("permission-warning");
           if (warningEl) warningEl.style.display = "block";
+          if (submitBtn) submitBtn.textContent = "Save Preferences";
         } else {
           try {
             let valRes = await fetch("/auth/calendar/validate", { credentials: "same-origin" });
@@ -343,8 +347,10 @@ async function initPreferences() {
               let valData = await valRes.json();
               if (!valData.valid) {
                 if (valData.code === "credential_failure") {
+                  hasCalendarAccess = false;
                   let warningEl = document.getElementById("permission-warning");
                   if (warningEl) warningEl.style.display = "block";
+                  if (submitBtn) submitBtn.textContent = "Save Preferences";
                 } else if (valData.code === "operational_failure") {
                   let opWarningEl = document.getElementById("operational-warning");
                   if (opWarningEl) opWarningEl.style.display = "block";
@@ -363,19 +369,21 @@ async function initPreferences() {
   } catch (e) {
     console.error("Pref: init fetch failed", e);
   }
+
   let form = document.getElementById("pref-form");
   if (form) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       let submitBtn = form.querySelector('button[type="submit"]');
+      let isSaveOnly = submitBtn && submitBtn.textContent.trim() === "Save Preferences";
       submitBtn.disabled = true;
-      submitBtn.textContent = "Syncing...";
+      submitBtn.textContent = isSaveOnly ? "Saving..." : "Syncing...";
 
       let captchaResponse = hcaptcha.getResponse();
       if (!captchaResponse) {
         showToast("Please complete the CAPTCHA challenge.", "error");
         submitBtn.disabled = false;
-        submitBtn.textContent = "Start Sync";
+        submitBtn.textContent = isSaveOnly ? "Save Preferences" : "Save & Trigger Sync";
         return;
       }
 
@@ -395,7 +403,7 @@ async function initPreferences() {
         });
         hcaptcha.reset();
         if (res) {
-          if (res.changed) {
+          if (res.changed && hasCalendarAccess) {
             try {
               let syncRes = await securePost("/sync", {});
               if (syncRes && syncRes.status === "rate_limited") {
@@ -418,15 +426,18 @@ async function initPreferences() {
           } else {
             showSuccess(
               "Preferences saved!",
-              "Your selections are already up to date. No new sync required.",
+              hasCalendarAccess
+                ? "Your selections are already up to date. No new sync required."
+                : "Your platform selections have been updated for your private iCal Feed.",
             );
           }
         }
       } catch (err) {
         hcaptcha.reset();
         showToast(err.message || "An error occurred.", "error");
+      } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = "Start Sync";
+        submitBtn.textContent = isSaveOnly ? "Save Preferences" : "Save & Trigger Sync";
       }
     });
   }
