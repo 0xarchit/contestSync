@@ -172,6 +172,8 @@ func main() {
 
 	r.HandleFunc("/health", adminHandlers.HealthCheck)
 
+	r.Get("/feed/ical", handlers.ServeICalFeed)
+
 	r.Get("/auth/google", handlers.GoogleLogin)
 	r.Get("/auth/google/callback", handlers.GoogleCallback)
 

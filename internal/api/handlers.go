@@ -799,6 +799,89 @@ func (h *Handlers) SavePreferences(w http.ResponseWriter, r *http.Request) {
 		"changed": changed,
 	})
 }
+
+func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
+	userIDStr := r.URL.Query().Get("user_id")
+	if userIDStr == "" {
+		http.Error(w, "missing user_id parameter", http.StatusBadRequest)
+		return
+	}
+
+	var userID int
+	if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err != nil || userID <= 0 {
+		http.Error(w, "invalid user_id", http.StatusBadRequest)
+		return
+	}
+
+	readPool := h.ReadDB
+	if readPool == nil {
+		readPool = h.DB
+	}
+
+	var platforms []string
+	err := readPool.QueryRow(r.Context(), "SELECT platforms FROM users WHERE id = $1", userID).Scan(&platforms)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "user not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "database error", http.StatusInternalServerError)
+		return
+	}
+
+	if len(platforms) == 0 {
+		platforms = extractor.Platforms
+	}
+
+	rows, err := readPool.Query(r.Context(), "SELECT id, name, url, start_time, end_time, platform FROM contests WHERE platform = ANY($1) AND start_time > NOW() - INTERVAL '7 days' ORDER BY start_time ASC", platforms)
+	if err != nil {
+		http.Error(w, "failed to query contests", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var buf strings.Builder
+	buf.WriteString("BEGIN:VCALENDAR\r\n")
+	buf.WriteString("VERSION:2.0\r\n")
+	buf.WriteString("PRODID:-//ContestSync//Competitive Programming Calendar Feed//EN\r\n")
+	buf.WriteString("CALSCALE:GREGORIAN\r\n")
+	buf.WriteString("METHOD:PUBLISH\r\n")
+	buf.WriteString("X-WR-CALNAME:ContestSync Contests\r\n")
+
+	for rows.Next() {
+		var c models.Contest
+		if err := rows.Scan(&c.ID, &c.Name, &c.URL, &c.StartTime, &c.EndTime, &c.Platform); err != nil {
+			continue
+		}
+
+		cleanName := strings.ReplaceAll(c.Name, "\n", " ")
+		cleanName = strings.ReplaceAll(cleanName, ";", "\\;")
+		cleanName = strings.ReplaceAll(cleanName, ",", "\\,")
+
+		buf.WriteString("BEGIN:VEVENT\r\n")
+		buf.WriteString(fmt.Sprintf("UID:%s@contestsync.app\r\n", c.ID))
+		buf.WriteString(fmt.Sprintf("SUMMARY:[%s] %s\r\n", strings.ToUpper(c.Platform), cleanName))
+		buf.WriteString(fmt.Sprintf("DESCRIPTION:Platform: %s\\nURL: %s\\n\\nSynced by ContestSync\r\n", c.Platform, c.URL))
+		buf.WriteString(fmt.Sprintf("URL:%s\r\n", c.URL))
+		buf.WriteString(fmt.Sprintf("LOCATION:%s\r\n", c.URL))
+		buf.WriteString(fmt.Sprintf("DTSTART:%s\r\n", c.StartTime.UTC().Format("20060102T150405Z")))
+		buf.WriteString(fmt.Sprintf("DTEND:%s\r\n", c.EndTime.UTC().Format("20060102T150405Z")))
+		buf.WriteString("BEGIN:VALARM\r\n")
+		buf.WriteString("TRIGGER:-PT30M\r\n")
+		buf.WriteString("ACTION:DISPLAY\r\n")
+		buf.WriteString("DESCRIPTION:Reminder\r\n")
+		buf.WriteString("END:VALARM\r\n")
+		buf.WriteString("END:VEVENT\r\n")
+	}
+
+	buf.WriteString("END:VCALENDAR\r\n")
+
+	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	w.Header().Set("Content-Disposition", "inline; filename=\"contestsync.ics\"")
+	w.Header().Set("Cache-Control", "public, max-age=1800")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(buf.String()))
+}
 func generateRandomString(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
