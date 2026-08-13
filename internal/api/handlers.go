@@ -432,16 +432,14 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	feedToken := hex.EncodeToString(hSum[:])
 
 	var userResp struct {
-		models.User
+		Email               string   `json:"email"`
+		UseDedicated        bool     `json:"use_dedicated"`
 		Platforms           []string `json:"platforms"`
 		CSRFToken           string   `json:"csrf_token"`
 		RefreshTokenMissing bool     `json:"refresh_token_missing"`
 		ICalFeedURL         string   `json:"ical_feed_url"`
 	}
-	userResp.ID = cachedUser.ID
-	userResp.GoogleID = cachedUser.GoogleID
 	userResp.Email = cachedUser.Email
-	userResp.CalendarID = cachedUser.CalendarID
 	userResp.UseDedicated = cachedUser.UseDedicated
 	userResp.Platforms = cachedUser.Platforms
 	userResp.RefreshTokenMissing = cachedUser.RefreshToken == ""
@@ -929,8 +927,12 @@ func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
 		escapedDesc := escapeICalText(fmt.Sprintf("Platform: %s\nURL: %s\n\nSynced by ContestSync", c.Platform, c.URL))
 		escapedLoc := escapeICalText(c.URL)
 
+		hostDomain := r.Host
+		if hostDomain == "" {
+			hostDomain = "contestsync.0xarchit.is-a.dev"
+		}
 		fmt.Fprintf(&buf, "BEGIN:VEVENT\r\n")
-		fmt.Fprintf(&buf, "UID:%s@contestsync.app\r\n", c.ID)
+		fmt.Fprintf(&buf, "UID:%s@%s\r\n", c.ID, hostDomain)
 		fmt.Fprintf(&buf, "DTSTAMP:%s\r\n", nowStamp)
 		fmt.Fprintf(&buf, "SUMMARY:%s\r\n", escapedSummary)
 		fmt.Fprintf(&buf, "DESCRIPTION:%s\r\n", escapedDesc)
