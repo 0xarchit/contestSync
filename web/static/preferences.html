@@ -133,6 +133,19 @@
               >
             </label>
           </div>
+
+          <div id="ical-feed-box" style="margin-top: 1.5rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem;">
+            <h3 style="margin: 0 0 0.5rem 0; font-size: 1rem; font-weight: 600; color: var(--text-primary);">📅 Subscribe via iCal Feed (.ics)</h3>
+            <p style="margin: 0 0 0.75rem 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
+              Subscribe using Apple Calendar, Outlook, Notion, or Thunderbird without requiring a Google Account.
+            </p>
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="ical-feed-input" readonly placeholder="Loading private iCal feed link..." style="flex: 1; padding: 0.6rem 0.8rem; background: var(--bg-input, rgba(255,255,255,0.05)); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); font-family: monospace; font-size: 0.8rem;" />
+              <button type="button" id="copy-ical-btn" class="btn btn-secondary" style="white-space: nowrap; font-size: 0.85rem; padding: 0.6rem 1rem;">Copy Feed URL</button>
+            </div>
+            <span id="copy-ical-status" style="display: block; margin-top: 0.4rem; font-size: 0.75rem; color: #10b981;"></span>
+          </div>
+
           <div
             style="margin-top: 1.5rem; display: flex; justify-content: center"
           >

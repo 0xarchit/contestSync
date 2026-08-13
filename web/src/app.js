@@ -270,6 +270,25 @@ async function initPreferences() {
       if (useDedicatedCheckbox) {
         useDedicatedCheckbox.checked = !!me.use_dedicated;
       }
+      if (me.ical_feed_url) {
+        let fullFeedURL = window.location.origin + me.ical_feed_url;
+        let feedInput = document.getElementById("ical-feed-input");
+        if (feedInput) feedInput.value = fullFeedURL;
+
+        let copyBtn = document.getElementById("copy-ical-btn");
+        if (copyBtn) {
+          copyBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(fullFeedURL).then(() => {
+              let statusEl = document.getElementById("copy-ical-status");
+              if (statusEl) {
+                statusEl.textContent = "✓ Feed URL copied to clipboard!";
+                setTimeout(() => { statusEl.textContent = ""; }, 3000);
+              }
+            });
+          });
+        }
+      }
+
       if (me.refresh_token_missing) {
         let warningEl = document.getElementById("permission-warning");
         if (warningEl) warningEl.style.display = "block";
