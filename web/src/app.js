@@ -330,38 +330,14 @@ async function initPreferences() {
           cb.checked = existingPlatforms.includes(cb.value);
         });
       }
-      let hasCalendarAccess = true;
+      let hasCalendarAccess = me.has_calendar_access !== false && !me.refresh_token_missing;
+      let submitBtn = document.querySelector('#pref-form button[type="submit"]');
 
-      // Deferred non-blocking validation check after UI is fully responsive
-      setTimeout(async () => {
-        let submitBtn = document.querySelector('#pref-form button[type="submit"]');
-        if (me.refresh_token_missing) {
-          hasCalendarAccess = false;
-          let warningEl = document.getElementById("permission-warning");
-          if (warningEl) warningEl.style.display = "block";
-          if (submitBtn) submitBtn.textContent = "Save Preferences";
-        } else {
-          try {
-            let valRes = await fetch("/auth/calendar/validate", { credentials: "same-origin" });
-            if (valRes.ok) {
-              let valData = await valRes.json();
-              if (!valData.valid) {
-                if (valData.code === "credential_failure") {
-                  hasCalendarAccess = false;
-                  let warningEl = document.getElementById("permission-warning");
-                  if (warningEl) warningEl.style.display = "block";
-                  if (submitBtn) submitBtn.textContent = "Save Preferences";
-                } else if (valData.code === "operational_failure") {
-                  let opWarningEl = document.getElementById("operational-warning");
-                  if (opWarningEl) opWarningEl.style.display = "block";
-                }
-              }
-            }
-          } catch (valErr) {
-            console.error("Calendar validation check failed", valErr);
-          }
-        }
-      }, 50);
+      if (!hasCalendarAccess) {
+        let warningEl = document.getElementById("permission-warning");
+        if (warningEl) warningEl.style.display = "block";
+        if (submitBtn) submitBtn.textContent = "Save Preferences";
+      }
     } else if (meRes.status === 401) {
       window.location.href = "/auth/google";
       return;

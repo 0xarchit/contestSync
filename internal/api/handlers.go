@@ -451,8 +451,8 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		}
 		var calendarID sql.NullString
 		var encryptedRefreshToken string
-		err := readPool.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, refresh_token FROM users WHERE id = $1", userID).Scan(
-			&cachedUser.ID, &cachedUser.GoogleID, &cachedUser.Email, &calendarID, &cachedUser.UseDedicated, &cachedUser.Platforms, &encryptedRefreshToken,
+		err := readPool.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, refresh_token, has_calendar_access FROM users WHERE id = $1", userID).Scan(
+			&cachedUser.ID, &cachedUser.GoogleID, &cachedUser.Email, &calendarID, &cachedUser.UseDedicated, &cachedUser.Platforms, &encryptedRefreshToken, &cachedUser.HasCalendarAccess,
 		)
 		if err != nil {
 			slog.Error("failed to fetch user", "user_id", userID, "error", err)
@@ -481,6 +481,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		Email               string   `json:"email"`
 		UseDedicated        bool     `json:"use_dedicated"`
 		Platforms           []string `json:"platforms"`
+		HasCalendarAccess   bool     `json:"has_calendar_access"`
 		CSRFToken           string   `json:"csrf_token"`
 		RefreshTokenMissing bool     `json:"refresh_token_missing"`
 		ICalFeedURL         string   `json:"ical_feed_url"`
@@ -488,7 +489,8 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	userResp.Email = cachedUser.Email
 	userResp.UseDedicated = cachedUser.UseDedicated
 	userResp.Platforms = cachedUser.Platforms
-	userResp.RefreshTokenMissing = cachedUser.RefreshToken == ""
+	userResp.HasCalendarAccess = cachedUser.HasCalendarAccess
+	userResp.RefreshTokenMissing = cachedUser.RefreshToken == "" || !cachedUser.HasCalendarAccess
 	userResp.ICalFeedURL = fmt.Sprintf("/feed/ical?token=%s", feedToken)
 
 	session, err := h.SessionStore.Get(r, "session")
