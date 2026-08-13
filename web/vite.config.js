@@ -18,12 +18,7 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'style.css') {
-            return 'style.bundle.css';
-          }
-          return assetInfo.name;
-        }
+        assetFileNames: 'style.bundle.css'
       }
     }
   }
