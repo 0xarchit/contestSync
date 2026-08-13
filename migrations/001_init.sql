@@ -8,6 +8,7 @@ CREATE TABLE users (
     calendar_id TEXT,
     use_dedicated BOOLEAN NOT NULL DEFAULT FALSE,
     platforms TEXT[] DEFAULT '{}' CHECK (platforms <@ ARRAY['leetcode', 'codeforces', 'codechef', 'atcoder', 'hackerrank', 'geeksforgeeks', 'code360']::text[]),
+    has_calendar_access BOOLEAN NOT NULL DEFAULT FALSE,
     last_sync_at TIMESTAMPTZ,
     sync_status sync_status_type DEFAULT 'pending',
     created_at TIMESTAMPTZ DEFAULT NOW()

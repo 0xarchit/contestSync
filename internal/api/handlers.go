@@ -231,6 +231,9 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scopeVal, _ := token.Extra("scope").(string)
+	hasCalAccess := strings.Contains(scopeVal, "https://www.googleapis.com/auth/calendar")
+
 	encryptedRefreshToken := ""
 	if token.RefreshToken != "" {
 		encryptedRefreshToken, err = auth.EncryptToken(token.RefreshToken, h.EncryptionKey)
@@ -242,11 +245,11 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	var userID int
 	var platforms []string
 	err = h.DB.QueryRow(r.Context(), `
-		INSERT INTO users (google_id, email, refresh_token)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (google_id) DO UPDATE SET email = $2, refresh_token = CASE WHEN $3 <> '' THEN $3 ELSE users.refresh_token END
+		INSERT INTO users (google_id, email, refresh_token, has_calendar_access)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (google_id) DO UPDATE SET email = $2, refresh_token = CASE WHEN $3 <> '' THEN $3 ELSE users.refresh_token END, has_calendar_access = $4
 		RETURNING id, platforms
-	`, userInfo.ID, userInfo.Email, encryptedRefreshToken).Scan(&userID, &platforms)
+	`, userInfo.ID, userInfo.Email, encryptedRefreshToken, hasCalAccess).Scan(&userID, &platforms)
 
 	if err != nil {
 		slog.Error("failed to upsert user", "error", err)

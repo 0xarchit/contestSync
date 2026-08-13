@@ -90,7 +90,7 @@ func (s *Scheduler) SyncAllUsers(ctx context.Context) {
 	limit := 500
 	offset := 0
 	for {
-		rows, err := s.ReadDB.Query(ctx, "SELECT id, refresh_token FROM users WHERE refresh_token IS NOT NULL AND refresh_token != '' ORDER BY id LIMIT $1 OFFSET $2", limit, offset)
+		rows, err := s.ReadDB.Query(ctx, "SELECT id FROM users WHERE has_calendar_access = TRUE AND refresh_token IS NOT NULL AND refresh_token != '' ORDER BY id LIMIT $1 OFFSET $2", limit, offset)
 		if err != nil {
 			slog.Error("failed to fetch users for sync", "error", err)
 			return
@@ -99,8 +99,7 @@ func (s *Scheduler) SyncAllUsers(ctx context.Context) {
 		for rows.Next() {
 			count++
 			var userID int
-			var refToken string
-			if err := rows.Scan(&userID, &refToken); err != nil {
+			if err := rows.Scan(&userID); err != nil {
 				slog.Error("failed to scan user ID", "error", err)
 				continue
 			}
