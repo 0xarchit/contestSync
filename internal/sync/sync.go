@@ -394,6 +394,7 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 				UseDefault: false,
 				Overrides: []*calendar.EventReminder{
 					{Method: "popup", Minutes: 30},
+					{Method: "popup", Minutes: 10},
 					{Method: "email", Minutes: 60},
 				},
 				ForceSendFields: []string{"UseDefault"},
