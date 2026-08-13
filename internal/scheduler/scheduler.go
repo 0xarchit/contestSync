@@ -30,7 +30,7 @@ func New(readDB *pgxpool.Pool, writeDB *pgxpool.Pool, q *queue.Queue) *Scheduler
 }
 
 func (s *Scheduler) Start() {
-	s.Cron.AddFunc("@daily", func() {
+	s.Cron.AddFunc("@every 30m", func() {
 		s.RunExtraction(context.Background())
 	})
 	s.Cron.AddFunc("@daily", func() {
@@ -43,6 +43,8 @@ func (s *Scheduler) Start() {
 		s.CleanupOAuthStates(context.Background())
 	})
 	s.Cron.Start()
+
+	go s.RunExtraction(context.Background())
 }
 
 func (s *Scheduler) PruneOldData(ctx context.Context) {
