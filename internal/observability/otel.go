@@ -36,17 +36,20 @@ func InitOTel(serviceName string) *OTelMetrics {
 	if headersStr != "" {
 		pairs := strings.Split(headersStr, ",")
 		for _, pair := range pairs {
-			pair = strings.TrimSpace(pair)
+			pair = strings.TrimLeft(strings.TrimSpace(pair), "=")
 			if pair == "" {
 				continue
 			}
 			kv := strings.SplitN(pair, "=", 2)
 			if len(kv) == 2 {
-				headers[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+				key := strings.TrimSpace(kv[0])
+				val := strings.TrimSpace(kv[1])
+				if key != "" {
+					headers[key] = val
+				}
 			} else if strings.HasPrefix(pair, "api-key=") {
 				headers["api-key"] = strings.TrimPrefix(pair, "api-key=")
 			} else {
-				// If user provided just the raw key without "api-key=" key name, set it as api-key header
 				headers["api-key"] = pair
 			}
 		}
