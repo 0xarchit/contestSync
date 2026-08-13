@@ -390,6 +390,10 @@ func (q *Queue) handleExtraction(ctx context.Context, platform string) {
 		}
 	}
 
+	if q.OTel != nil && q.OTel.ExtractionCounter != nil && len(contests) > 0 {
+		q.OTel.ExtractionCounter.Add(ctx, int64(len(contests)), metric.WithAttributes(attribute.String("platform", platform)))
+	}
+
 	q.logDatabaseContestsTelemetry(ctx)
 }
 
@@ -411,9 +415,6 @@ func (q *Queue) logDatabaseContestsTelemetry(ctx context.Context) {
 			platformCounts = append(platformCounts, plat, count)
 			fmt.Fprintf(&summaryText, "• <b>%s</b>: %d contest(s)\n", plat, count)
 			totalContests += count
-			if q.OTel != nil && q.OTel.ExtractionCounter != nil {
-				q.OTel.ExtractionCounter.Add(ctx, int64(count), metric.WithAttributes(attribute.String("platform", plat)))
-			}
 		}
 	}
 	if err := rows.Err(); err != nil {
