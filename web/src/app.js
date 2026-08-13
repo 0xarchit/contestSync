@@ -270,6 +270,23 @@ async function initPreferences() {
       if (useDedicatedCheckbox) {
         useDedicatedCheckbox.checked = !!me.use_dedicated;
       }
+      if (me.refresh_token_missing) {
+        let warningEl = document.getElementById("permission-warning");
+        if (warningEl) warningEl.style.display = "block";
+      } else {
+        try {
+          let valRes = await fetch("/auth/calendar/validate", { credentials: "same-origin" });
+          if (valRes.ok) {
+            let valData = await valRes.json();
+            if (!valData.valid) {
+              let warningEl = document.getElementById("permission-warning");
+              if (warningEl) warningEl.style.display = "block";
+            }
+          }
+        } catch (valErr) {
+          console.error("Calendar validation check failed", valErr);
+        }
+      }
     } else if (meRes.status === 401) {
       window.location.href = "/auth/google";
       return;

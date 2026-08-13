@@ -56,6 +56,13 @@ func (s *Scheduler) PruneOldData(ctx context.Context) {
 		slog.Info("pruned old contests", "count", res.RowsAffected())
 	}
 
+	delUngranted, err := s.WriteDB.Exec(ctx, "DELETE FROM users WHERE (refresh_token IS NULL OR refresh_token = '') AND created_at < NOW() - INTERVAL '24 hours'")
+	if err != nil {
+		slog.Error("failed to prune ungranted users older than 24 hours", "error", err)
+	} else if delUngranted.RowsAffected() > 0 {
+		slog.Info("pruned ungranted users older than 24 hours", "count", delUngranted.RowsAffected())
+	}
+
 	if s.Queue != nil {
 		for _, platform := range extractor.Platforms {
 			if err := s.Queue.InvalidateContestsCache(ctx, platform); err != nil {

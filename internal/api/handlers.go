@@ -257,6 +257,67 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/preferences", http.StatusSeeOther)
 }
 
+func (h *Handlers) ValidateCalendarAccess(w http.ResponseWriter, r *http.Request) {
+	val := r.Context().Value(ContextKeyUserID)
+	if val == nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	userID := val.(int)
+
+	var encryptedRefreshToken string
+	err := h.DB.QueryRow(r.Context(), "SELECT refresh_token FROM users WHERE id = $1", userID).Scan(&encryptedRefreshToken)
+	if err != nil || encryptedRefreshToken == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{
+			"valid": false,
+			"error": "missing_refresh_token",
+		})
+		return
+	}
+
+	refreshToken, err := auth.DecryptToken(encryptedRefreshToken, h.EncryptionKey)
+	if err != nil || refreshToken == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{
+			"valid": false,
+			"error": "invalid_refresh_token",
+		})
+		return
+	}
+
+	tokenSource := h.AuthProvider.Config.TokenSource(r.Context(), &oauth2.Token{RefreshToken: refreshToken})
+	srv, err := calendar.NewService(r.Context(), option.WithTokenSource(tokenSource))
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{
+			"valid": false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	_, err = srv.Calendars.Get("primary").Do()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{
+			"valid": false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{
+		"valid": true,
+	})
+}
+
 func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	val := r.Context().Value(ContextKeyUserID)
 	if val == nil {
@@ -310,8 +371,9 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 
 	var user struct {
 		models.User
-		Platforms []string `json:"platforms"`
-		CSRFToken string   `json:"csrf_token"`
+		Platforms            []string `json:"platforms"`
+		CSRFToken            string   `json:"csrf_token"`
+		RefreshTokenMissing  bool     `json:"refresh_token_missing"`
 	}
 	user.ID = cachedUser.ID
 	user.GoogleID = cachedUser.GoogleID
@@ -319,6 +381,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 	user.CalendarID = cachedUser.CalendarID
 	user.UseDedicated = cachedUser.UseDedicated
 	user.Platforms = cachedUser.Platforms
+	user.RefreshTokenMissing = cachedUser.RefreshToken == ""
 
 	session, err := h.SessionStore.Get(r, "session")
 	if err == nil {
