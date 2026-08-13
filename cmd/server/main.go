@@ -186,7 +186,11 @@ func main() {
 		r.Use(api.RequireAuth(sessionStore))
 		r.Get("/me", handlers.Me)
 		r.Get("/platforms", handlers.GetPlatforms)
-		r.Get("/auth/calendar/validate", handlers.ValidateCalendarAccess)
+
+		r.Group(func(r chi.Router) {
+			r.Use(api.RateLimitMiddleware(valkeyClient, 20, time.Minute))
+			r.Get("/auth/calendar/validate", handlers.ValidateCalendarAccess)
+		})
 
 		r.Group(func(r chi.Router) {
 			r.Use(api.CSRFMiddleware(sessionStore))

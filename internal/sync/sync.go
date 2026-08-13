@@ -120,13 +120,22 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 			}
 		}
 		if s.OnTelegramEvent != nil {
-			if status == "success" {
-				msg := fmt.Sprintf("🔄 <b>[USER CALENDAR SYNCED]</b>\n\nUser ID: <b>%d</b>\nEmail: <b>%s</b>\nCalendar ID: <code>%s</code>\nStatus: ✅ <b>Success</b>", userID, EscapeTelegramHTML(user.Email), EscapeTelegramHTML(user.CalendarID))
-				s.OnTelegramEvent("USER_SYNC_SUCCESS", msg)
-			} else {
-				msg := fmt.Sprintf("⚠️ <b>[USER CALENDAR SYNC FAILED]</b>\n\nUser ID: <b>%d</b>\nEmail: <b>%s</b>\nError: <code>%s</code>", userID, EscapeTelegramHTML(user.Email), EscapeTelegramHTML(retErr.Error()))
-				s.OnTelegramEvent("USER_SYNC_FAILURE", msg)
-			}
+			go func(uID int, syncStatus string, syncErr error, cID string) {
+				if syncStatus == "success" {
+					msg := fmt.Sprintf("🔄 <b>[USER CALENDAR SYNCED]</b>\n\nUser ID: <b>%d</b>\nCalendar ID: <code>%s</code>\nStatus: ✅ <b>Success</b>", uID, EscapeTelegramHTML(cID))
+					s.OnTelegramEvent("USER_SYNC_SUCCESS", msg)
+				} else {
+					errStr := "unknown error"
+					if syncErr != nil {
+						errStr = syncErr.Error()
+						if idx := strings.Index(errStr, "@"); idx > 0 {
+							errStr = errStr[:idx] + "[REDACTED]"
+						}
+					}
+					msg := fmt.Sprintf("⚠️ <b>[USER CALENDAR SYNC FAILED]</b>\n\nUser ID: <b>%d</b>\nError: <code>%s</code>", uID, EscapeTelegramHTML(errStr))
+					s.OnTelegramEvent("USER_SYNC_FAILURE", msg)
+				}
+			}(userID, status, retErr, user.CalendarID)
 		}
 	}()
 

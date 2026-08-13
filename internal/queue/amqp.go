@@ -69,21 +69,21 @@ func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, err
 
 	ch, err := conn.Channel()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to open AMQP channel: %w", err)
 	}
 
 	_, err = ch.QueueDeclare(QueueExtraction, true, false, false, false, nil)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to declare extraction queue: %w", err)
 	}
 
 	_, err = ch.QueueDeclare(QueueSync, true, false, false, false, nil)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		_ = ch.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to declare sync queue: %w", err)
 	}
 
@@ -98,8 +98,11 @@ func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, err
 }
 
 func (q *Queue) Health(ctx context.Context) error {
-	if q.useInMemory || q.AMQPConn == nil || q.AMQPConn.IsClosed() {
+	if q.useInMemory {
 		return nil
+	}
+	if q.AMQPConn == nil || q.AMQPConn.IsClosed() {
+		return fmt.Errorf("AMQP connection is closed")
 	}
 	return nil
 }
@@ -402,9 +405,13 @@ func (q *Queue) logDatabaseContestsTelemetry(ctx context.Context) {
 		var count int
 		if err := rows.Scan(&plat, &count); err == nil {
 			platformCounts = append(platformCounts, plat, count)
-			summaryText.WriteString(fmt.Sprintf("• <b>%s</b>: %d contest(s)\n", plat, count))
+			fmt.Fprintf(&summaryText, "• <b>%s</b>: %d contest(s)\n", plat, count)
 			totalContests += count
 		}
+	}
+	if err := rows.Err(); err != nil {
+		slog.Error("error iterating contest counts telemetry rows", "error", err)
+		return
 	}
 	slog.Info("database contest metrics updated", platformCounts...)
 

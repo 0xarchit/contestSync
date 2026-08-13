@@ -95,6 +95,21 @@
             </div>
           </div>
         </div>
+        <div id="operational-warning" style="display:none; background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.3); border-radius: 8px; padding: 1rem; margin-bottom: 1.25rem;">
+          <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <div>
+              <h4 style="color: #eab308; margin: 0 0 0.25rem 0; font-size: 0.95rem; font-weight: 600;">Temporary Calendar Service Issues</h4>
+              <p style="color: var(--text-primary); margin: 0 0 0.5rem 0; font-size: 0.85rem; line-height: 1.4;">
+                Google Calendar service is currently taking longer than expected to respond or experiencing a brief outage. Your preferences will still save and sync automatically once service stabilizes.
+              </p>
+            </div>
+          </div>
+        </div>
         <h1>Choose your platforms</h1>
         <p>We'll sync contests from these to your Google Calendar.</p>
         <form id="pref-form">

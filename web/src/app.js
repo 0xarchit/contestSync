@@ -279,8 +279,13 @@ async function initPreferences() {
           if (valRes.ok) {
             let valData = await valRes.json();
             if (!valData.valid) {
-              let warningEl = document.getElementById("permission-warning");
-              if (warningEl) warningEl.style.display = "block";
+              if (valData.code === "credential_failure") {
+                let warningEl = document.getElementById("permission-warning");
+                if (warningEl) warningEl.style.display = "block";
+              } else if (valData.code === "operational_failure") {
+                let opWarningEl = document.getElementById("operational-warning");
+                if (opWarningEl) opWarningEl.style.display = "block";
+              }
             }
           }
         } catch (valErr) {

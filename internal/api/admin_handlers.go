@@ -107,17 +107,17 @@ func (h *AdminHandlers) HealthCheck(w http.ResponseWriter, r *http.Request) {
 			services["valkey"] = componentStatus{Status: "not_configured", LatencyMs: 0}
 		}
 		if h.Queue != nil {
-			kafkaLatency, kafkaErr := measure(func() error {
+			queueLatency, queueErr := measure(func() error {
 				return h.Queue.Health(checkCtx)
 			})
-			if kafkaErr != nil {
-				services["kafka"] = componentStatus{Status: "unhealthy", LatencyMs: kafkaLatency, Error: kafkaErr.Error()}
+			if queueErr != nil {
+				services["queue"] = componentStatus{Status: "unhealthy", LatencyMs: queueLatency, Error: queueErr.Error()}
 				allHealthy = false
 			} else {
-				services["kafka"] = componentStatus{Status: "healthy", LatencyMs: kafkaLatency}
+				services["queue"] = componentStatus{Status: "healthy", LatencyMs: queueLatency}
 			}
 		} else {
-			services["kafka"] = componentStatus{Status: "not_configured", LatencyMs: 0}
+			services["queue"] = componentStatus{Status: "not_configured", LatencyMs: 0}
 		}
 		resp := healthResponse{Services: services}
 		w.Header().Set("Content-Type", "application/json")

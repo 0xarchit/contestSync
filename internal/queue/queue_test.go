@@ -65,3 +65,18 @@ func TestQueueDrain(t *testing.T) {
 		t.Error("expected Drain to block until wg is Done")
 	}
 }
+
+func TestHandleExtractionZeroContests(t *testing.T) {
+	cfg := &config.Config{
+		AMQPURL: "",
+	}
+
+	q, err := New(cfg, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create queue: %v", err)
+	}
+
+	if err := q.Health(context.Background()); err != nil {
+		t.Errorf("expected queue health to be nil, got: %v", err)
+	}
+}

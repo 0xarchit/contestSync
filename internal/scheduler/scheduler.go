@@ -61,6 +61,9 @@ func (s *Scheduler) PruneOldData(ctx context.Context) {
 		slog.Error("failed to prune ungranted users older than 24 hours", "error", err)
 	} else if delUngranted.RowsAffected() > 0 {
 		slog.Info("pruned ungranted users older than 24 hours", "count", delUngranted.RowsAffected())
+		if s.OnEvent != nil {
+			s.OnEvent("CRON_PRUNE_UNGRANTED_USERS", fmt.Sprintf("Pruned %d ungranted user(s) older than 24 hours.", delUngranted.RowsAffected()))
+		}
 	}
 
 	if s.Queue != nil {

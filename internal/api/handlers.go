@@ -216,7 +216,8 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	if h.Valkey != nil {
 		cacheKey := models.UserCacheKey(userID)
-		if err := h.Valkey.Del(r.Context(), cacheKey).Err(); err != nil {
+		valKey := fmt.Sprintf("user:cal_val:%d", userID)
+		if err := h.Valkey.Del(r.Context(), cacheKey, valKey).Err(); err != nil {
 			slog.Error("failed to invalidate user cache after oauth upsert", "user_id", userID, "error", err)
 		}
 	}
@@ -265,57 +266,90 @@ func (h *Handlers) ValidateCalendarAccess(w http.ResponseWriter, r *http.Request
 	}
 	userID := val.(int)
 
+	cacheKey := fmt.Sprintf("user:cal_val:%d", userID)
+	if h.Valkey != nil {
+		cachedVal, err := h.Valkey.Get(r.Context(), cacheKey).Result()
+		if err == nil && cachedVal != "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(cachedVal))
+			return
+		}
+	}
+
 	var encryptedRefreshToken string
 	err := h.DB.QueryRow(r.Context(), "SELECT refresh_token FROM users WHERE id = $1", userID).Scan(&encryptedRefreshToken)
 	if err != nil || encryptedRefreshToken == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{
-			"valid": false,
-			"error": "missing_refresh_token",
-		})
+		res := map[string]any{
+			"valid":      false,
+			"code":       "credential_failure",
+			"error_type": "missing_refresh_token",
+		}
+		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 5*time.Minute)
 		return
 	}
 
 	refreshToken, err := auth.DecryptToken(encryptedRefreshToken, h.EncryptionKey)
 	if err != nil || refreshToken == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{
-			"valid": false,
-			"error": "invalid_refresh_token",
-		})
+		res := map[string]any{
+			"valid":      false,
+			"code":       "credential_failure",
+			"error_type": "invalid_refresh_token",
+		}
+		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 5*time.Minute)
 		return
 	}
 
 	tokenSource := h.AuthProvider.Config.TokenSource(r.Context(), &oauth2.Token{RefreshToken: refreshToken})
 	srv, err := calendar.NewService(r.Context(), option.WithTokenSource(tokenSource))
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{
-			"valid": false,
-			"error": err.Error(),
-		})
+		res := map[string]any{
+			"valid":      false,
+			"code":       "operational_failure",
+			"error_type": "calendar_service_error",
+			"details":    err.Error(),
+		}
+		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 1*time.Minute)
 		return
 	}
 
 	_, err = srv.Calendars.Get("primary").Do()
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]any{
-			"valid": false,
-			"error": err.Error(),
-		})
+		code := "operational_failure"
+		if gErr, ok := err.(*googleapi.Error); ok {
+			if gErr.Code == http.StatusUnauthorized || gErr.Code == http.StatusForbidden {
+				code = "credential_failure"
+			}
+		}
+		res := map[string]any{
+			"valid":      false,
+			"code":       code,
+			"error_type": "calendar_api_error",
+			"details":    err.Error(),
+		}
+		ttl := 5 * time.Minute
+		if code == "operational_failure" {
+			ttl = 1 * time.Minute
+		}
+		writeJSONAndCache(w, r, h.Valkey, cacheKey, res, ttl)
 		return
 	}
 
+	res := map[string]any{
+		"valid": true,
+		"code":  "success",
+	}
+	writeJSONAndCache(w, r, h.Valkey, cacheKey, res, 5*time.Minute)
+}
+
+func writeJSONAndCache(w http.ResponseWriter, r *http.Request, rdb *redis.Client, cacheKey string, payload map[string]any, ttl time.Duration) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]any{
-		"valid": true,
-	})
+	data, _ := json.Marshal(payload)
+	w.Write(data)
+	if rdb != nil && cacheKey != "" {
+		rdb.Set(r.Context(), cacheKey, string(data), ttl)
+	}
 }
 
 func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
