@@ -8,49 +8,29 @@ import (
 )
 
 type Config struct {
-	DatabaseURL            string
-	ReadDatabaseURLs       string
-	ConnectionLimit        int
-	ConnectionPoolLimit    int
-	GoogleClientID         string
-	GoogleClientSecret     string
-	GoogleRedirectURL      string
-	SessionSecret          []byte
-	EncryptionKey          []byte
-	Port                   string
-	WorkerPort             string
-	Env                    string
-	AdminPassword          string
-	KafkaHost              string
-	KafkaPort              string
-	KafkaAccessKey         []byte
-	KafkaAccessCert        []byte
-	KafkaCACert            []byte
-	KafkaPartitions        int
-	KafkaReplicationFactor int
-	ValkeyURI              string
-	TelegramProxyURL       string
-	ProxySecretKey         string
-	TelegramGroupID        string
-	TelegramGroupTopicID   string
-	From                   string
+	DatabaseURL          string
+	ReadDatabaseURLs     string
+	ConnectionLimit      int
+	ConnectionPoolLimit  int
+	GoogleClientID       string
+	GoogleClientSecret   string
+	GoogleRedirectURL    string
+	SessionSecret        []byte
+	EncryptionKey        []byte
+	Port                 string
+	WorkerPort           string
+	Env                  string
+	AdminPassword        string
+	AMQPURL              string
+	ValkeyURI            string
+	TelegramProxyURL     string
+	ProxySecretKey       string
+	TelegramGroupID      string
+	TelegramGroupTopicID string
+	From                 string
 }
 
 func Load() *Config {
-	kafkaAccessKey := []byte(os.Getenv("KAFKA_ACCESS_KEY"))
-	kafkaAccessCert := []byte(os.Getenv("KAFKA_ACCESS_CERTIFICATE"))
-	kafkaCACert := []byte(os.Getenv("KAFKA_CA_CERTIFICATE"))
-
-	kafkaPartitions, err := strconv.Atoi(os.Getenv("KAFKA_PARTITIONS"))
-	if err != nil || kafkaPartitions <= 0 {
-		kafkaPartitions = 2
-	}
-
-	kafkaRepFactor, err := strconv.Atoi(os.Getenv("KAFKA_REPLICATION_FACTOR"))
-	if err != nil || kafkaRepFactor <= 0 {
-		kafkaRepFactor = 1
-	}
-
 	connLimit, _ := strconv.Atoi(os.Getenv("CONNECTION_LIMIT"))
 	if connLimit == 0 {
 		connLimit = 800
@@ -93,32 +73,31 @@ func Load() *Config {
 		secretKey = os.Getenv("ProxySecretKey")
 	}
 
+	amqpURL := os.Getenv("CLOUDAMQP_URL")
+	if amqpURL == "" {
+		amqpURL = os.Getenv("AMQP_URL")
+	}
+
 	return &Config{
-		DatabaseURL:            os.Getenv("POSTGRES_DB"),
-		ReadDatabaseURLs:       os.Getenv("POSTGRES_READ_DB"),
-		ConnectionLimit:        connLimit,
-		ConnectionPoolLimit:    connPoolLimit,
-		GoogleClientID:         os.Getenv("GOOGLE_CLIENT_ID"),
-		GoogleClientSecret:     os.Getenv("GOOGLE_CLIENT_SECRET"),
-		GoogleRedirectURL:      os.Getenv("GOOGLE_REDIRECT_URL"),
-		SessionSecret:          sessionSecret,
-		EncryptionKey:          encryptionKey,
-		Port:                   port,
-		WorkerPort:             workerPort,
-		Env:                    env,
-		AdminPassword:          os.Getenv("ADMIN_PASSWORD"),
-		KafkaHost:              os.Getenv("KAFKA_HOST"),
-		KafkaPort:              os.Getenv("KAFKA_PORT"),
-		KafkaAccessKey:         kafkaAccessKey,
-		KafkaAccessCert:        kafkaAccessCert,
-		KafkaCACert:            kafkaCACert,
-		KafkaPartitions:        kafkaPartitions,
-		KafkaReplicationFactor: kafkaRepFactor,
-		ValkeyURI:              os.Getenv("VALKEY_URI"),
-		TelegramProxyURL:       os.Getenv("TG_PROXY_URL"),
-		ProxySecretKey:         secretKey,
-		TelegramGroupID:        os.Getenv("TG_GROUP_ID"),
-		TelegramGroupTopicID:   os.Getenv("TG_GROUP_TOPIC_ID"),
-		From:                   os.Getenv("FROM"),
+		DatabaseURL:          os.Getenv("POSTGRES_DB"),
+		ReadDatabaseURLs:     os.Getenv("POSTGRES_READ_DB"),
+		ConnectionLimit:      connLimit,
+		ConnectionPoolLimit:  connPoolLimit,
+		GoogleClientID:       os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret:   os.Getenv("GOOGLE_CLIENT_SECRET"),
+		GoogleRedirectURL:    os.Getenv("GOOGLE_REDIRECT_URL"),
+		SessionSecret:        sessionSecret,
+		EncryptionKey:        encryptionKey,
+		Port:                 port,
+		WorkerPort:           workerPort,
+		Env:                  env,
+		AdminPassword:        os.Getenv("ADMIN_PASSWORD"),
+		AMQPURL:              amqpURL,
+		ValkeyURI:            os.Getenv("VALKEY_URI"),
+		TelegramProxyURL:     os.Getenv("TG_PROXY_URL"),
+		ProxySecretKey:       secretKey,
+		TelegramGroupID:      os.Getenv("TG_GROUP_ID"),
+		TelegramGroupTopicID: os.Getenv("TG_GROUP_TOPIC_ID"),
+		From:                 os.Getenv("FROM"),
 	}
 }

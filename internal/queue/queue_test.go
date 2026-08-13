@@ -10,7 +10,7 @@ import (
 
 func TestInMemoryQueuePublish(t *testing.T) {
 	cfg := &config.Config{
-		KafkaHost: "",
+		AMQPURL: "",
 	}
 
 	q, err := New(cfg, nil, nil)
@@ -40,7 +40,7 @@ func TestInMemoryQueuePublish(t *testing.T) {
 
 func TestQueueDrain(t *testing.T) {
 	cfg := &config.Config{
-		KafkaHost: "",
+		AMQPURL: "",
 	}
 
 	q, err := New(cfg, nil, nil)
