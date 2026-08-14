@@ -4,8 +4,8 @@ import time
 
 import requests
 
-MAX_CHARS_PER_CHUNK = 25000
-MAX_DIFF_CHARS = 3000
+MAX_CHARS_PER_CHUNK = 12000
+MAX_DIFF_CHARS = 1200
 INCLUDED_PATHS = [
     "cmd",
     "internal",
@@ -36,7 +36,7 @@ def get_commit_data():
         hashes = subprocess.check_output(log_range).decode(errors="ignore").split()
         commit_data = []
 
-        for h in hashes[:100]:
+        for h in hashes[:50]:
             msg = (
                 subprocess.check_output(["git", "show", "-s", "--format=%s", h])
                 .decode(errors="ignore")
@@ -74,8 +74,9 @@ def call_ai_with_retries(endpoint_url, api_token, payload, max_retries=3):
     }
     for attempt in range(max_retries):
         try:
+            print(f"Calling AI endpoint (attempt {attempt + 1})...")
             response = requests.post(
-                endpoint_url, headers=headers, json=payload, timeout=60
+                endpoint_url, headers=headers, json=payload, timeout=120
             )
             if response.status_code == 429:
                 wait_time = (attempt + 1) * 15
@@ -158,6 +159,7 @@ def main():
                     {"role": "user", "content": f"Commits and diffs:\n{chunk}"},
                 ],
                 "temperature": 0.2,
+                "max_tokens": 1024,
             }
             summary = call_ai_with_retries(endpoint_url, api_token, payload)
             if summary:
@@ -178,6 +180,7 @@ def main():
                 },
             ],
             "temperature": 0.3,
+            "max_tokens": 2048,
         }
         final_notes = call_ai_with_retries(endpoint_url, api_token, final_payload)
         if final_notes:
