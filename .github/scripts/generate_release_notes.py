@@ -4,16 +4,15 @@ import time
 
 import requests
 
-MODEL_URL = "https://models.github.ai/inference/chat/completions"
-MODEL_NAME = "gpt-4o-mini"
-MAX_CHARS_PER_CHUNK = 15000
-MAX_DIFF_CHARS = 1500
+MAX_CHARS_PER_CHUNK = 25000
+MAX_DIFF_CHARS = 3000
 INCLUDED_PATHS = [
     "cmd",
     "internal",
     "config",
     "models",
     "web",
+    "migrations",
     "*.go",
     "go.mod",
     "go.sum",
@@ -64,23 +63,30 @@ def get_commit_data():
 
         return commit_data
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error getting commit data: {e}")
         return []
 
 
-def call_ai_with_retries(payload, api_key, max_retries=3):
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+def call_ai_with_retries(endpoint_url, api_token, payload, max_retries=3):
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json",
+    }
     for attempt in range(max_retries):
         try:
             response = requests.post(
-                MODEL_URL, headers=headers, json=payload, timeout=45
+                endpoint_url, headers=headers, json=payload, timeout=60
             )
             if response.status_code == 429:
-                time.sleep((attempt + 1) * 20)
+                wait_time = (attempt + 1) * 15
+                print(f"Rate limited (429). Retrying in {wait_time}s...")
+                time.sleep(wait_time)
                 continue
             response.raise_for_status()
-            return response.json()["choices"][0]["message"]["content"]
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
         except Exception as e:
+            print(f"AI API attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
                 time.sleep(5 * (attempt + 1))
             else:
@@ -90,7 +96,11 @@ def call_ai_with_retries(payload, api_key, max_retries=3):
 
 def main():
     output_file = "release_notes.md"
-    api_key = os.getenv("GH_MODELS_API_KEY")
+    
+    api_base_url = (os.getenv("API_BASE_URL") or "").rstrip("/")
+    api_token = os.getenv("API_TOKEN") or os.getenv("GH_MODELS_API_KEY")
+    api_model = os.getenv("API_MODEL") or ""
+
     commit_data = get_commit_data()
 
     raw_lines = []
@@ -104,12 +114,22 @@ def main():
     else:
         raw_changelog = "Maintenance release."
 
-    if not api_key:
+    if not api_base_url or not api_token or not api_model:
+        print("Missing API_BASE_URL, API_TOKEN, or API_MODEL. Writing raw commit log.")
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(raw_changelog)
         return
 
+    if not api_base_url.endswith("/chat/completions"):
+        if api_base_url.endswith("/v1"):
+            endpoint_url = f"{api_base_url}/chat/completions"
+        else:
+            endpoint_url = f"{api_base_url}/v1/chat/completions"
+    else:
+        endpoint_url = api_base_url
+
     if not commit_data:
+        print("No commit data found, writing standard release description.")
         with open(output_file, "w", encoding="utf-8") as f:
             f.write("System optimizations and stability improvements.")
         return
@@ -129,7 +149,7 @@ def main():
         summaries = []
         for chunk in chunks:
             payload = {
-                "model": MODEL_NAME,
+                "model": api_model,
                 "messages": [
                     {
                         "role": "system",
@@ -139,14 +159,14 @@ def main():
                 ],
                 "temperature": 0.2,
             }
-            summary = call_ai_with_retries(payload, api_key)
+            summary = call_ai_with_retries(endpoint_url, api_token, payload)
             if summary:
                 summaries.append(summary)
-            time.sleep(2)
+            time.sleep(1)
 
         combined_summaries = "\n\n".join(summaries)
         final_payload = {
-            "model": MODEL_NAME,
+            "model": api_model,
             "messages": [
                 {
                     "role": "system",
@@ -157,16 +177,17 @@ def main():
                     "content": f"Partial summaries:\n{combined_summaries}",
                 },
             ],
-            "temperature": 0.4,
+            "temperature": 0.3,
         }
-        final_notes = call_ai_with_retries(final_payload, api_key)
+        final_notes = call_ai_with_retries(endpoint_url, api_token, final_payload)
         if final_notes:
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(final_notes)
+            print("Successfully generated release notes via NVIDIA NIM / OpenAI-compatible API.")
         else:
-            raise Exception("Empty AI response")
+            raise Exception("Empty AI response received.")
     except Exception as e:
-        print(f"Fallback: {e}")
+        print(f"Fallback to raw changelog due to error: {e}")
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(raw_changelog)
 

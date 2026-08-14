@@ -27,7 +27,9 @@ jobs:
 
       - name: Generate AI release description
         env:
-          GH_MODELS_API_KEY: ${{ secrets.GH_MODELS_API_KEY }}
+          API_BASE_URL: ${{ secrets.API_BASE_URL || vars.API_BASE_URL }}
+          API_TOKEN: ${{ secrets.API_TOKEN || vars.API_TOKEN }}
+          API_MODEL: ${{ secrets.API_MODEL || vars.API_MODEL }}
         run: |
           python .github/scripts/generate_release_notes.py
 
