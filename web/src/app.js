@@ -259,6 +259,7 @@ async function initPreferences() {
 
   let container = document.getElementById("platforms-list");
   let existingPlatforms = [];
+  let hasCalendarAccess = true;
 
   // Render static fallback platform checkboxes immediately so the page doesn't feel blocked
   if (container && container.innerHTML.includes("Loading platforms...")) {
@@ -329,7 +330,7 @@ async function initPreferences() {
           cb.checked = existingPlatforms.includes(cb.value);
         });
       }
-      let hasCalendarAccess = me.has_calendar_access !== false && !me.refresh_token_missing;
+      hasCalendarAccess = me.has_calendar_access !== false && !me.refresh_token_missing;
       let submitBtn = document.querySelector('#pref-form button[type="submit"]');
 
       if (!hasCalendarAccess) {
