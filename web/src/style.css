@@ -1638,7 +1638,7 @@ details[open] .faq-a {
   .ical-feed-box-inner {
     flex-direction: column !important;
   }
-  header div {
+  .dashboard-header-actions {
     flex-wrap: wrap;
     gap: 0.5rem !important;
   }

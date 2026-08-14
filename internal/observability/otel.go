@@ -61,10 +61,12 @@ func InitOTel(serviceName string) *OTelMetrics {
 	trimmedEndpoint = strings.TrimPrefix(trimmedEndpoint, "http://")
 
 	urlPath := "/v1/metrics"
+	traceUrlPath := "/v1/traces"
 	if idx := strings.Index(trimmedEndpoint, "/"); idx != -1 {
 		basePath := strings.TrimSuffix(trimmedEndpoint[idx:], "/")
 		if basePath != "" {
 			urlPath = basePath + "/v1/metrics"
+			traceUrlPath = basePath + "/v1/traces"
 		}
 		trimmedEndpoint = trimmedEndpoint[:idx]
 	}
@@ -91,7 +93,7 @@ func InitOTel(serviceName string) *OTelMetrics {
 
 	traceOpts := []otlptracehttp.Option{
 		otlptracehttp.WithEndpoint(trimmedEndpoint),
-		otlptracehttp.WithURLPath("/v1/traces"),
+		otlptracehttp.WithURLPath(traceUrlPath),
 	}
 	if strings.HasPrefix(endpoint, "http://") {
 		traceOpts = append(traceOpts, otlptracehttp.WithInsecure())

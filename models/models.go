@@ -13,7 +13,7 @@ const (
 )
 
 func UserCacheKey(userID int) string {
-	return "cache:user:" + strconv.Itoa(userID)
+	return "cache:user:v2:" + strconv.Itoa(userID)
 }
 
 func ContestsCacheKey(platform string) string {

@@ -108,6 +108,19 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	calValCacheKey := CalendarValidationCacheKey(userID)
+	if h.Valkey != nil {
+		if cachedVal, err := h.Valkey.Get(r.Context(), calValCacheKey).Result(); err == nil && cachedVal != "" {
+			var valRes struct {
+				Valid bool `json:"valid"`
+			}
+			if json.Unmarshal([]byte(cachedVal), &valRes) == nil && !valRes.Valid {
+				http.Error(w, `{"error":"calendar access permission missing"}`, http.StatusForbidden)
+				return
+			}
+		}
+	}
+
 	valCtx, valCancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer valCancel()
 	tokenSource := h.AuthProvider.Config.TokenSource(valCtx, &oauth2.Token{RefreshToken: refreshToken})
@@ -117,7 +130,11 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, _ := http.NewRequestWithContext(valCtx, http.MethodGet, "https://oauth2.googleapis.com/tokeninfo?access_token="+tok.AccessToken, nil)
+	req, reqBuildErr := http.NewRequestWithContext(valCtx, http.MethodGet, "https://oauth2.googleapis.com/tokeninfo?access_token="+tok.AccessToken, nil)
+	if reqBuildErr != nil {
+		http.Error(w, `{"error":"failed to create validation request"}`, http.StatusInternalServerError)
+		return
+	}
 	resp, reqErr := http.DefaultClient.Do(req)
 	if reqErr == nil {
 		defer resp.Body.Close()
@@ -259,7 +276,7 @@ func (h *Handlers) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	if h.Valkey != nil {
 		cacheKey := models.UserCacheKey(userID)
-		valKey := fmt.Sprintf("user:cal_val:%d", userID)
+		valKey := CalendarValidationCacheKey(userID)
 		if err := h.Valkey.Del(r.Context(), cacheKey, valKey).Err(); err != nil {
 			slog.Error("failed to invalidate user cache after oauth upsert", "user_id", userID, "error", err)
 		}
@@ -451,7 +468,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		}
 		var calendarID sql.NullString
 		var encryptedRefreshToken string
-		err := readPool.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, refresh_token, has_calendar_access FROM users WHERE id = $1", userID).Scan(
+		err := readPool.QueryRow(r.Context(), "SELECT id, google_id, email, calendar_id, use_dedicated, platforms, COALESCE(refresh_token, ''), has_calendar_access FROM users WHERE id = $1", userID).Scan(
 			&cachedUser.ID, &cachedUser.GoogleID, &cachedUser.Email, &calendarID, &cachedUser.UseDedicated, &cachedUser.Platforms, &encryptedRefreshToken, &cachedUser.HasCalendarAccess,
 		)
 		if err != nil {

@@ -259,7 +259,6 @@ async function initPreferences() {
 
   let container = document.getElementById("platforms-list");
   let existingPlatforms = [];
-  let csrfToken = "";
 
   // Render static fallback platform checkboxes immediately so the page doesn't feel blocked
   if (container && container.innerHTML.includes("Loading platforms...")) {

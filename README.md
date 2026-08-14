@@ -97,8 +97,8 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 Web Application Client ID from Google Cloud Console | None | `abc-123.apps.googleusercontent.com` |
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 Web Application Client Secret from Google Cloud Console | None | `sec_code_xyz` |
 | `GOOGLE_REDIRECT_URL` | Redirect Callback URL registered in Google API credentials | None | `http://localhost:8080/auth/google/callback` |
-| `SESSION_SECRET` | 32-byte (64 hex characters) key for Gorilla Cookie / Valkey Sessions | None | `d3b07384d113edec49eaa6238ad5ff00112233445566778899aabbccddeeff00` |
-| `ENCRYPTION_KEY` | 32-byte (64 hex characters) key for AES Refresh Token encryption | None | `2d9bb20065718dfdc0237af8ad3ff49a112233445566778899aabbccddeeff00` |
+| `SESSION_SECRET` | 32-byte (64 hex characters) key for Gorilla Cookie / Valkey Sessions | None | `<64-hex-character-secret>` (generate via `openssl rand -hex 32`) |
+| `ENCRYPTION_KEY` | 32-byte (64 hex characters) key for AES Refresh Token encryption | None | `<64-hex-character-secret>` (generate via `openssl rand -hex 32`) |
 | `ADMIN_PASSWORD` | Standard password for admin panel authentication | None | `adm_pwd_secure` |
 | `TRUST_PROXY` | Gated verification trust toggle for client IP forwarding | `false` | `true` |
 | `TELEGRAM_PROXY_URL` | Outbound Proxy target for forwarding warnings/errors | None | `https://tg-proxy.myorg.workers.dev` |
@@ -256,18 +256,14 @@ sequenceDiagram
 | `POSTGRES_READ_DB` | Comma-separated Connection URLs for Read Replica Databases | None | `postgres://user:pass@rep1:port/db,postgres://user:pass@rep2:port/db` |
 | `CONNECTION_LIMIT` | Maximum connections allowed in Primary Write pool | `800` | `20` |
 | `CONNECTION_POOL_LIMIT`| Maximum connections allowed per Read Replica Pool | `10000` | `100` |
-| `VALKEY_URI` | Connection URI string for Valkey instance | None | `rediss://default:password@host:port` |
+| `CLOUDAMQP_URL` / `AMQP_URL` | AMQP 0.9.1 connection URL for CloudAMQP LavinMQ (fallback: in-memory) | None | `amqps://user:pass@lemming.rmq.cloudamqp.com/vhost` |
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 Web Application Client ID from Google Cloud Console | None | `abc-123.apps.googleusercontent.com` |
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 Web Application Client Secret from Google Cloud Console | None | `sec_code_xyz` |
 | `GOOGLE_REDIRECT_URL` | Redirect Callback URL registered in Google API credentials | None | `http://localhost:8080/auth/google/callback` |
-| `SESSION_SECRET` | 32-byte hex-encoded key for Gorilla Cookie / Valkey Sessions | None | `d3b07384d113edec49eaa6238ad5ff00` |
-| `ENCRYPTION_KEY` | 32-byte hex-encoded key for AES Refresh Token encryption | None | `2d9bb20065718dfdc0237af8ad3ff49a` |
+| `SESSION_SECRET` | 32-byte (64 hex characters) key for Gorilla Cookie / Valkey Sessions | None | `<64-hex-character-secret>` (generate via `openssl rand -hex 32`) |
+| `ENCRYPTION_KEY` | 32-byte (64 hex characters) key for AES Refresh Token encryption | None | `<64-hex-character-secret>` (generate via `openssl rand -hex 32`) |
 | `ADMIN_PASSWORD` | Standard password for admin panel authentication | None | `adm_pwd_secure` |
 | `TRUST_PROXY` | Gated verification trust toggle for client IP forwarding | `false` | `true` |
-| `KAFKA_HOST` | Host Address of Apache Kafka broker | None | `kafka.service.consul` |
-| `KAFKA_PORT` | Port number of Apache Kafka broker | `9092` | `9094` |
-| `KAFKA_PARTITIONS` | Dynamic partition count generated for topics | `2` | `4` |
-| `KAFKA_REPLICATION_FACTOR`| Dynamic replication count set on topic creation | `1` | `2` |
 | `TELEGRAM_PROXY_URL` | Outbound Proxy target for forwarding warnings/errors | None | `https://tg-proxy.myorg.workers.dev` |
 | `PROXY_SECRET_KEY` | Token key for proxy HTTP authorization | None | `sec_key_abc` |
 | `TELEGRAM_GROUP_ID` | Group Identifier target for slog alerts | None | `-1002938475` |
