@@ -76,7 +76,7 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 * **Frontend Warning State**: Displays explicit **Google Calendar Access Missing** alerts for missing/revoked tokens and **Temporary Calendar Service Issues** for API outages.
 * **24-Hour Automated Cleanup**: Background cron task automatically deletes accounts with ungranted tokens (`refresh_token IS NULL`) after 24 hours to prevent orphan DB records.
 
-### 5. Real-Time Contest Overwrite & Obsolete Contest Pruning
+### 5. Scheduled Contest Overwrite & Obsolete Contest Pruning
 
 * **Dynamic Pruning**: When scrapers run, a cleanup operation is executed: `DELETE FROM contests WHERE platform = $1 AND start_time > NOW() AND id != ALL($2)`. This deletes upcoming contests that were rescheduled or cancelled on the host platform.
 * **Boundary Integrity**: The prune query is locked to upcoming contests (`start_time > NOW()`). This preserves past contests and their synced events, preventing redundant event syncs or double-syncing.
