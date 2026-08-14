@@ -48,7 +48,7 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 ### 1. High-Concurrency CloudAMQP LavinMQ Queue Engine
 
 * **Ultra-Light & Blazing Fast**: Powered by CloudAMQP LavinMQ (AMQP 0.9.1), consuming extraction tasks (concurrency limit 3) and user sync tasks (concurrency limit 10) with near-zero idle memory footprint (~15MB RAM).
-* **Transparent Fallback**: Automatic, zero-configuration fallback to thread-safe in-memory channels (`chan`) when `CLOUDAMQP_URL` is omitted. When neither is configured, tasks run in-memory and unconsumed in-flight tasks may be lost on process restart.
+* **Transparent Fallback**: Automatic, zero-configuration fallback to thread-safe in-memory channels (`chan`) when neither `AMQP_URL` nor `CLOUDAMQP_URL` is configured, or if AMQP connection initialization fails. When operating in-memory, unconsumed in-flight tasks may be lost on process restart.
 * **Persistent Task Queuing**: Manages persistent `extraction-tasks` and `sync-tasks` queues with automatic retry handling.
 
 ### 2. High-Concurrency Neon DB Read/Write Split Engine
@@ -63,16 +63,16 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 | Caching Area | Cache Key Format | Time To Live (TTL) | Eviction Trigger | Storage Format |
 | :--- | :--- | :--- | :--- | :--- |
 | **Contests List** | `cache:contests:<platform>` | 12 Hours | Crawler batch finished | JSON Contest Array |
-| **User Preferences** | `cache:user:<userID>` | 24 Hours | Google OAuth callback / Preferences save / Account deletion | JSON Profile Struct |
-| **Calendar Validation**| `user:cal_val:<userID>` | 5 Minutes | Google OAuth login / Revoke / Validation check | JSON Status Struct |
+| **User Preferences** | `cache:user:v2:<userID>` | 24 Hours | Google OAuth callback / Preferences save / Account deletion | JSON Profile Struct |
+| **Calendar Validation**| `user:cal_val:<userID>` | 15 Min (Success/Credential) / 1 Min (Operational) | Google OAuth login / Token Revocation | JSON Status Struct |
 | **Synced Events** | `cache:synced_events:<userID>` | 24 Hours | End of SyncUser run (if new sync recorded) | JSON String Array |
 | **Platforms List**| `cache:platforms` | 24 Hours | Static Compile (None) | Pre-serialized JSON |
-| **IP Rate Limiter** | `limit:<ip_address>:<window>` | Variable (Dynamic) | Auto-Expires on window end | Numeric string counter |
+| **IP Rate Limiter** | `ratelimit:<route_pattern>:<ip>` | Variable (Dynamic) | Auto-Expires on window end | Numeric string counter |
 | **User Sessions** | `session:<session_id>` | 7 Days | Account logout | Encoded Gorilla Session |
 
 ### 4. Cached Calendar Scope Validation & 24h Ungranted User Pruning
 
-* **Cached Scope Verification**: `GET /auth/calendar/validate` checks user Google Calendar access and caches validation status in Valkey for up to 5 minutes (`user:cal_val:<userID>`), invalidated instantly on OAuth login or token revoke.
+* **Cached Scope Verification**: `GET /auth/calendar/validate` checks user Google Calendar access and returns cached validation status from Valkey (`user:cal_val:<userID>`, 15m for valid/credential failure, 1m for operational failure), invalidated on OAuth login or token revoke.
 * **Frontend Warning State**: Displays explicit **Google Calendar Access Missing** alerts for missing/revoked tokens and **Temporary Calendar Service Issues** for API outages.
 * **24-Hour Automated Cleanup**: Background cron task automatically deletes accounts with ungranted tokens (`refresh_token IS NULL`) after 24 hours to prevent orphan DB records.
 
@@ -161,7 +161,7 @@ sequenceDiagram
     participant Browser as Web Browser
     participant Server as Server Binary (cmd/server)
     participant Queue as Queue Broker (LavinMQ / In-Memory)
-    participant Worker as Background Worker (cmd/worker)
+    participant Worker as Background Worker (cmd/worker / cmd/server)
     participant Valkey as Valkey Cache
     participant DB_Read as Neon DB Replicas (Round-Robin)
     participant DB_Write as Neon DB Primary

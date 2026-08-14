@@ -144,6 +144,10 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			http.Error(w, `{"error":"calendar validation service temporarily unavailable, please try again"}`, http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(w, `{"error":"google calendar permission validation failed"}`, http.StatusForbidden)
 		return
 	}
