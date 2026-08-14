@@ -20,8 +20,8 @@ func TestCacheKeysAndTTLs(t *testing.T) {
 	}
 
 	uKey := UserCacheKey(123)
-	if uKey != "cache:user:123" {
-		t.Errorf("expected 'cache:user:123', got %q", uKey)
+	if uKey != "cache:user:v2:123" {
+		t.Errorf("expected 'cache:user:v2:123', got %q", uKey)
 	}
 
 	cKey := ContestsCacheKey("codeforces")

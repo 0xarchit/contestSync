@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
@@ -103,7 +104,13 @@ func RateLimitMiddleware(valkeyClient *redis.Client, max int, duration time.Dura
 			}
 
 			if valkeyClient != nil {
-				key := "ratelimit:" + ip
+				scope := "unmatched"
+				if rctx := chi.RouteContext(r.Context()); rctx != nil {
+					if pattern := rctx.RoutePattern(); pattern != "" {
+						scope = pattern
+					}
+				}
+				key := "ratelimit:" + scope + ":" + ip
 				ctx := r.Context()
 				pipe := valkeyClient.TxPipeline()
 				incr := pipe.Incr(ctx, key)

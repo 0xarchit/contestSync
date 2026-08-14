@@ -13,7 +13,7 @@ const (
 )
 
 func UserCacheKey(userID int) string {
-	return "cache:user:" + strconv.Itoa(userID)
+	return "cache:user:v2:" + strconv.Itoa(userID)
 }
 
 func ContestsCacheKey(platform string) string {
@@ -40,13 +40,14 @@ type User struct {
 }
 
 type CachedUser struct {
-	ID           int      `json:"id"`
-	GoogleID     string   `json:"google_id"`
-	Email        string   `json:"email"`
-	RefreshToken string   `json:"refresh_token"`
-	CalendarID   string   `json:"calendar_id"`
-	UseDedicated bool     `json:"use_dedicated"`
-	Platforms    []string `json:"platforms"`
+	ID                int      `json:"id"`
+	GoogleID          string   `json:"google_id"`
+	Email             string   `json:"email"`
+	RefreshToken      string   `json:"refresh_token"`
+	CalendarID        string   `json:"calendar_id"`
+	UseDedicated      bool     `json:"use_dedicated"`
+	Platforms         []string `json:"platforms"`
+	HasCalendarAccess bool     `json:"has_calendar_access"`
 }
 
 type Contest struct {

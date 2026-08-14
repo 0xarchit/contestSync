@@ -53,6 +53,11 @@ func main() {
 		defer tgManager.Drain()
 	}
 
+	otelMetrics := observability.InitOTel("contestsync-worker")
+	if otelMetrics != nil && otelMetrics.Shutdown != nil {
+		defer otelMetrics.Shutdown(context.Background())
+	}
+
 	if len(cfg.EncryptionKey) != 32 {
 		log.Fatal("ENCRYPTION_KEY must be exactly 32 bytes")
 	}
@@ -91,12 +96,18 @@ func main() {
 		EncryptionKey: cfg.EncryptionKey,
 		Valkey:        valkeyClient,
 	}
+	if tgManager != nil {
+		syncer.OnTelegramEvent = tgManager.TriggerSystemEvent
+	}
 
 	q, err := queue.New(cfg, pool.WriteDB(), syncer)
 	if err != nil {
-		log.Fatalf("failed to initialize kafka queue: %v", err)
+		log.Fatalf("failed to initialize queue: %v", err)
 	}
 	defer q.Close()
+	if tgManager != nil {
+		q.OnTelegramEvent = tgManager.TriggerSystemEvent
+	}
 	q.StartConsumers(shutdownCtx, cfg)
 
 	mux := http.NewServeMux()

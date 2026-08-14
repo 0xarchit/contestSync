@@ -32,7 +32,7 @@ type TelegramClient struct {
 func NewClient(cfg TelegramConfig) *TelegramClient {
 	return &TelegramClient{
 		cfg:    cfg,
-		client: &http.Client{Timeout: 5 * time.Second},
+		client: &http.Client{Timeout: 15 * time.Second},
 	}
 }
 

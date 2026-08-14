@@ -7,7 +7,7 @@
       content="RPixmM9Umri4goWpBuXjUznBBT0Ryuo7jyMziFp67yg"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Preferences - ContestSync</title>
+    <title>Preferences & Settings - ContestSync</title>
     <link rel="icon" type="image/webp" href="icon.webp" />
     <meta
       name="description"
@@ -26,144 +26,151 @@
     <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
     <script src="app.bundle.js" defer></script>
   </head>
-  <body>
+  <body class="dashboard-body">
     <div class="hc-scanlines"></div>
     <div class="hc-vignette"></div>
     <div class="hc-grid"></div>
     <div class="custom-cursor"></div>
     <div class="custom-cursor-dot"></div>
     <div class="noise-overlay"></div>
-    <div class="pref-container">
-      <div class="pref-card">
-        <div
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.25rem;
-          "
-        >
-          <a
-            href="/"
-            class="back-home-link"
-            style="
-              font-size: var(--t-label);
-              display: flex;
-              align-items: center;
-              gap: 0.4rem;
-            "
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
+
+    <!-- Dashboard Top Header -->
+    <header style="border-bottom: 1px solid var(--bg-border); background: rgba(5, 7, 10, 0.85); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 50;">
+      <div style="max-width: 1200px; margin: 0 auto; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between;">
+        <a href="/" style="display: flex; align-items: center; gap: 0.75rem; text-decoration: none;">
+          <img src="/icon.webp" alt="ContestSync Logo" width="28" height="28" style="border-radius: 6px;" />
+          <span style="font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.15rem; color: var(--text-primary); letter-spacing: -0.02em;">Contest<span style="color: var(--accent-primary);">Sync</span></span>
+        </a>
+        <div class="dashboard-header-actions" style="display: flex; align-items: center; gap: 1.25rem;">
+          <div id="user-email" class="user-email" style="font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: var(--text-secondary); background: rgba(255,255,255,0.03); padding: 0.35rem 0.75rem; border-radius: 6px; border: 1px solid var(--bg-border);"></div>
+          <a href="/" class="btn btn-ghost" style="font-size: 0.8rem; padding: 0.4rem 0.8rem; display: inline-flex; align-items: center; gap: 0.4rem;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
             Home
           </a>
-          <span
-            style="
-              font-size: var(--t-label);
-              color: var(--text-dim);
-              font-family: &quot;IBM Plex Mono&quot;, monospace;
-            "
-            >contestsync/preferences</span
-          >
         </div>
-        <div id="user-email" class="user-email"></div>
-        <h1>Choose your platforms</h1>
-        <p>We'll sync contests from these to your Google Calendar.</p>
-        <form id="pref-form">
+      </div>
+    </header>
+
+    <main style="max-width: 1000px; margin: 2rem auto; padding: 0 1.5rem 4rem 1.5rem;">
+      <div style="margin-bottom: 2rem;">
+        <h1 style="font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 800; color: var(--text-primary); margin: 0 0 0.5rem 0; letter-spacing: -0.02em;">Sync Dashboard</h1>
+        <p style="color: var(--text-secondary); margin: 0; font-size: 0.95rem;">Manage your competitive programming platform subscriptions and integration settings.</p>
+      </div>
+
+      <div id="permission-warning" style="display:none; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="display: flex; align-items: flex-start; gap: 0.85rem;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <div>
+            <h4 style="color: #ef4444; margin: 0 0 0.25rem 0; font-size: 0.95rem; font-weight: 600;">Google Calendar Access Missing</h4>
+            <p style="color: var(--text-primary); margin: 0 0 0.75rem 0; font-size: 0.85rem; line-height: 1.4;">
+              ContestSync requires Google Calendar permission to sync your competitive programming contests. Without calendar permissions, direct sync will not work.
+            </p>
+            <a href="/auth/google" class="btn btn-primary" style="display: inline-flex; font-size: 0.85rem; padding: 0.5rem 1rem; background: #ef4444; border-color: #ef4444;">
+              Grant Google Calendar Permission
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div id="operational-warning" style="display:none; background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.25); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
+        <div style="display: flex; align-items: flex-start; gap: 0.85rem;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div>
+            <h4 style="color: #eab308; margin: 0 0 0.25rem 0; font-size: 0.95rem; font-weight: 600;">Temporary Calendar Service Issues</h4>
+            <p style="color: var(--text-primary); margin: 0 0 0.5rem 0; font-size: 0.85rem; line-height: 1.4;">
+              Google Calendar service is currently taking longer than expected to respond or experiencing a brief outage. Your preferences will still save and sync automatically once service stabilizes.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <form id="pref-form" style="display: grid; grid-template-columns: 1fr; gap: 1.75rem;">
+        <!-- Card 1: Platform Selection -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--bg-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 4px 24px rgba(0,0,0,0.2);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+            <div>
+              <h2 style="font-family: 'Syne', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.25rem 0;">Target Platforms</h2>
+              <p style="color: var(--text-secondary); margin: 0; font-size: 0.85rem;">Select which contest platforms should be tracked and synchronized.</p>
+            </div>
+          </div>
           <div id="platforms-list" class="platforms-list">
             <div class="loading-state">Loading platforms...</div>
           </div>
-          <div
-            class="dedicated-option"
-            style="
-              margin-top: 1.5rem;
-              display: flex;
-              align-items: center;
-              gap: 0.75rem;
-            "
-          >
-            <label class="platform-item" style="width: 100%">
-              <input type="checkbox" id="use-dedicated" />
-              <span class="custom-checkbox"></span>
-              <span style="font-size: 0.9rem; color: var(--text-primary)"
-                >Sync to a dedicated "ContestSync" calendar</span
-              >
-            </label>
-          </div>
-          <div
-            style="margin-top: 1.5rem; display: flex; justify-content: center"
-          >
-            <div
-              class="h-captcha"
-              data-sitekey="62305c74-e7c6-42b8-9676-b23c1a309b9a"
-            ></div>
-          </div>
-          <button
-            type="submit"
-            class="btn btn-primary"
-            style="width: 100%; justify-content: center; margin-top: 1.5rem"
-          >
-            Start Sync
-          </button>
-          <div style="text-align: center; margin-top: 1rem">
-            <p
-              style="
-                font-size: 0.8rem;
-                color: var(--text-dim);
-                font-family: &quot;IBM Plex Mono&quot;, monospace;
-              "
-            >
-              * Sync requests are queued and take a few minutes to appear in
-              your calendar.
-            </p>
-          </div>
-        </form>
-        <div style="margin-top: 2rem; border-top: 1px solid var(--bg-border); padding-top: 1.5rem;">
-          <div
-            class="delete-google-option"
-            style="
-              display: flex;
-              align-items: center;
-              gap: 0.75rem;
-            "
-          >
-            <label class="platform-item" style="width: 100%; cursor: pointer;">
-              <input type="checkbox" id="delete-google-data" />
-              <span class="custom-checkbox"></span>
-              <span style="font-size: 0.9rem; color: var(--text-primary)">
-                Also delete my ContestSync calendar and synced events from Google Calendar
-              </span>
-            </label>
-          </div>
-          <p
-            style="
-              font-size: 0.75rem;
-              color: var(--text-dim);
-              margin-top: 0.5rem;
-              margin-left: 2.5rem;
-            "
-          >
-            If checked, this will permanently remove your dedicated "ContestSync" calendar (or all synced events from your primary calendar) and revoke app access.
-          </p>
-          <button
-            id="delete-account-btn"
-            class="btn btn-ghost"
-            style="width: 100%; justify-content: center; margin-top: 1rem; color: var(--text-dim); font-size: var(--t-label);"
-          >
-            Remove Account & Data
-          </button>
         </div>
+
+        <!-- Card 2: Calendar Options -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--bg-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 4px 24px rgba(0,0,0,0.2);">
+          <h2 style="font-family: 'Syne', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.25rem 0;">Calendar Sync Options</h2>
+          <p style="color: var(--text-secondary); margin: 0 0 1.25rem 0; font-size: 0.85rem;">Configure how events are inserted into your Google Calendar.</p>
+
+          <label class="platform-item" style="width: 100%; cursor: pointer;">
+            <input type="checkbox" id="use-dedicated" />
+            <span class="custom-checkbox"></span>
+            <div>
+              <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary); display: block;">Sync to a dedicated "ContestSync" calendar</span>
+              <span style="font-size: 0.8rem; color: var(--text-secondary); display: block; margin-top: 0.15rem;">Creates a separate calendar layer so your primary calendar stays uncluttered.</span>
+            </div>
+          </label>
+        </div>
+
+        <!-- Card 3: iCal Subscription Feed -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--bg-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 4px 24px rgba(0,0,0,0.2);">
+          <h2 style="font-family: 'Syne', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--text-primary); margin: 0 0 0.25rem 0;">📅 iCal Subscription Feed (.ics)</h2>
+          <p style="color: var(--text-secondary); margin: 0 0 1rem 0; font-size: 0.85rem; line-height: 1.4;">
+            Subscribe via Apple Calendar, Outlook, Notion, or Thunderbird using your secure unguessable feed token.
+          </p>
+          <div class="ical-feed-box-inner" style="display: flex; gap: 0.75rem;">
+            <input type="text" id="ical-feed-input" readonly placeholder="Loading private iCal feed link..." aria-label="Private iCal feed URL" style="flex: 1; min-width: 0; width: 100%; padding: 0.65rem 0.9rem; background: rgba(0,0,0,0.3); border: 1px solid var(--bg-border); border-radius: 8px; color: var(--text-primary); font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem;" />
+            <button type="button" id="copy-ical-btn" class="btn btn-secondary" style="white-space: nowrap; font-size: 0.85rem; padding: 0.65rem 1.2rem;">Copy Feed Link</button>
+          </div>
+          <span id="copy-ical-status" style="display: block; margin-top: 0.5rem; font-size: 0.8rem; color: var(--accent-primary); font-weight: 500;"></span>
+        </div>
+
+        <!-- Submit Controls -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--bg-border); border-radius: 16px; padding: 1.75rem; box-shadow: 0 4px 24px rgba(0,0,0,0.2); text-align: center;">
+          <div style="margin-bottom: 1.25rem; display: flex; justify-content: center;">
+            <div class="h-captcha" data-sitekey="62305c74-e7c6-42b8-9676-b23c1a309b9a"></div>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 0.85rem; font-size: 1rem; font-weight: 700;">
+            Save & Trigger Sync
+          </button>
+          <p style="font-size: 0.8rem; color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; margin: 0.85rem 0 0 0;">
+            * Sync requests are queued and take 1-3 minutes to reflect on your calendar apps.
+          </p>
+        </div>
+      </form>
+
+      <!-- Danger Zone Section -->
+      <div style="margin-top: 2.5rem; background: rgba(239, 68, 68, 0.03); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 16px; padding: 1.75rem;">
+        <h3 style="font-family: 'Syne', sans-serif; font-size: 1.05rem; font-weight: 700; color: #ef4444; margin: 0 0 0.5rem 0;">Danger Zone</h3>
+        <p style="color: var(--text-secondary); margin: 0 0 1rem 0; font-size: 0.85rem;">Revoke app permissions and delete all synced ContestSync calendar data.</p>
+        
+        <label class="platform-item" style="width: 100%; cursor: pointer; margin-bottom: 1rem; background: rgba(0,0,0,0.2);">
+          <input type="checkbox" id="delete-google-data" />
+          <span class="custom-checkbox"></span>
+          <span style="font-size: 0.85rem; color: var(--text-primary);">
+            Also delete my dedicated "ContestSync" calendar and synced events from Google Calendar
+          </span>
+        </label>
+
+        <button type="button" id="delete-account-btn" class="btn btn-ghost" style="width: 100%; justify-content: center; border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; font-size: 0.85rem; padding: 0.65rem;">
+          Delete Account & Revoke Permissions
+        </button>
       </div>
-    </div>
+    </main>
+
+    <footer style="border-top: 1px solid var(--bg-border); background: var(--bg-base); padding: 2rem 1.5rem; text-align: center; font-size: 0.8rem; color: var(--text-dim);">
+      <p style="margin: 0;">ContestSync — Open Source Competitive Programming Calendar Synchronization.</p>
+    </footer>
   </body>
 </html>

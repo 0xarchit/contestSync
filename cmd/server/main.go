@@ -57,6 +57,11 @@ func main() {
 		defer tgManager.Drain()
 	}
 
+	otelMetrics := observability.InitOTel("contestsync-server")
+	if otelMetrics != nil && otelMetrics.Shutdown != nil {
+		defer otelMetrics.Shutdown(context.Background())
+	}
+
 	if len(cfg.EncryptionKey) != 32 {
 		log.Fatal("ENCRYPTION_KEY must be exactly 32 bytes")
 	}
@@ -120,12 +125,19 @@ func main() {
 		EncryptionKey: cfg.EncryptionKey,
 		Valkey:        valkeyClient,
 	}
+	if tgManager != nil {
+		syncer.OnTelegramEvent = tgManager.TriggerSystemEvent
+	}
 
 	q, err := queue.New(cfg, pool.WriteDB(), syncer)
 	if err != nil {
-		log.Fatalf("failed to initialize kafka queue: %v", err)
+		log.Fatalf("failed to initialize queue: %v", err)
 	}
 	defer q.Close()
+	q.OTel = otelMetrics
+	if tgManager != nil {
+		q.OnTelegramEvent = tgManager.TriggerSystemEvent
+	}
 	q.StartConsumers(shutdownCtx, cfg)
 
 	handlers := &api.Handlers{
@@ -166,6 +178,8 @@ func main() {
 
 	r.HandleFunc("/health", adminHandlers.HealthCheck)
 
+	r.Get("/feed/ical", handlers.ServeICalFeed)
+
 	r.Get("/auth/google", handlers.GoogleLogin)
 	r.Get("/auth/google/callback", handlers.GoogleCallback)
 
@@ -180,6 +194,11 @@ func main() {
 		r.Use(api.RequireAuth(sessionStore))
 		r.Get("/me", handlers.Me)
 		r.Get("/platforms", handlers.GetPlatforms)
+
+		r.Group(func(r chi.Router) {
+			r.Use(api.RateLimitMiddleware(valkeyClient, 60, time.Minute))
+			r.Get("/auth/calendar/validate", handlers.ValidateCalendarAccess)
+		})
 
 		r.Group(func(r chi.Router) {
 			r.Use(api.CSRFMiddleware(sessionStore))

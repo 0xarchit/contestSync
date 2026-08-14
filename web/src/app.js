@@ -257,159 +257,193 @@ async function initPreferences() {
       { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" },
     );
 
+  let container = document.getElementById("platforms-list");
   let existingPlatforms = [];
+  let hasCalendarAccess = true;
+
+  // Render static fallback platform checkboxes immediately so the page doesn't feel blocked
+  if (container && container.innerHTML.includes("Loading platforms...")) {
+    let staticPlatforms = ["leetcode", "codeforces", "codechef", "atcoder", "hackerrank", "geeksforgeeks", "code360"];
+    let colorMap = {
+      leetcode: "var(--platform-leetcode)",
+      codeforces: "var(--platform-codeforces)",
+      codechef: "var(--platform-codechef)",
+      atcoder: "var(--platform-atcoder)",
+      hackerrank: "var(--platform-hackerrank)",
+      geeksforgeeks: "var(--platform-gfg)",
+      code360: "var(--platform-code360)",
+    };
+    container.innerHTML = "";
+    staticPlatforms.forEach((p) => {
+      let label = document.createElement("label");
+      label.className = "platform-item";
+      label.innerHTML = `
+        <input type="checkbox" name="platform" value="${p}" checked>
+        <div class="custom-checkbox"></div>
+        <div class="p-dot" style="background: ${colorMap[p] || "var(--text-dim)"}"></div>
+        <span class="p-label">${p.charAt(0).toUpperCase() + p.slice(1)}</span>
+      `;
+      container.appendChild(label);
+    });
+  }
+
   try {
-    let meRes = await fetch("/me", { credentials: "same-origin" });
+    const [meRes, pRes] = await Promise.all([
+      fetch("/me", { credentials: "same-origin" }),
+      fetch("/platforms", { credentials: "same-origin" })
+    ]);
+
     if (meRes.ok) {
       let me = await meRes.json();
       csrfToken = me.csrf_token || "";
       let emailEl = document.getElementById("user-email");
       if (emailEl && me.email) emailEl.textContent = me.email;
       existingPlatforms = me.platforms || [];
+
       let useDedicatedCheckbox = document.getElementById("use-dedicated");
       if (useDedicatedCheckbox) {
         useDedicatedCheckbox.checked = !!me.use_dedicated;
+      }
+
+      if (me.ical_feed_url) {
+        let fullFeedURL = window.location.origin + me.ical_feed_url;
+        let feedInput = document.getElementById("ical-feed-input");
+        if (feedInput) feedInput.value = fullFeedURL;
+
+        let copyBtn = document.getElementById("copy-ical-btn");
+        if (copyBtn) {
+          copyBtn.onclick = () => {
+            navigator.clipboard.writeText(fullFeedURL).then(() => {
+              let statusEl = document.getElementById("copy-ical-status");
+              if (statusEl) {
+                statusEl.textContent = "✓ Feed URL copied to clipboard!";
+                setTimeout(() => { statusEl.textContent = ""; }, 3000);
+              }
+            });
+          };
+        }
+      }
+
+      if (existingPlatforms.length > 0 && container) {
+        let checkboxes = container.querySelectorAll('input[name="platform"]');
+        checkboxes.forEach((cb) => {
+          cb.checked = existingPlatforms.includes(cb.value);
+        });
+      }
+      hasCalendarAccess = me.has_calendar_access !== false && !me.refresh_token_missing;
+      let submitBtn = document.querySelector('#pref-form button[type="submit"]');
+
+      if (!hasCalendarAccess) {
+        let warningEl = document.getElementById("permission-warning");
+        if (warningEl) warningEl.style.display = "block";
+        if (submitBtn) submitBtn.textContent = "Save Preferences";
       }
     } else if (meRes.status === 401) {
       window.location.href = "/auth/google";
       return;
     }
   } catch (e) {
-    console.error("Pref: me fetch failed", e);
+    console.error("Pref: init fetch failed", e);
   }
 
-  try {
-    let pRes = await fetch("/platforms", { credentials: "same-origin" });
-    let container = document.getElementById("platforms-list");
-    if (!container) return;
+  let form = document.getElementById("pref-form");
+  if (form) {
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      let submitBtn = form.querySelector('button[type="submit"]');
+      let isSaveOnly = submitBtn && submitBtn.textContent.trim() === "Save Preferences";
+      submitBtn.disabled = true;
+      submitBtn.textContent = isSaveOnly ? "Saving..." : "Syncing...";
 
-    if (pRes.ok) {
-      let data = await pRes.json();
-      let platforms = data.platforms || [];
+      let captchaResponse = hcaptcha.getResponse();
+      if (!captchaResponse) {
+        showToast("Please complete the CAPTCHA challenge.", "error");
+        submitBtn.disabled = false;
+        submitBtn.textContent = isSaveOnly ? "Save Preferences" : "Save & Trigger Sync";
+        return;
+      }
 
-      let colorMap = {
-        leetcode: "var(--platform-leetcode)",
-        codeforces: "var(--platform-codeforces)",
-        codechef: "var(--platform-codechef)",
-        atcoder: "var(--platform-atcoder)",
-        hackerrank: "var(--platform-hackerrank)",
-        geeksforgeeks: "var(--platform-gfg)",
-        code360: "var(--platform-code360)",
-      };
-
-      container.innerHTML = "";
-      platforms.forEach((p) => {
-        let label = document.createElement("label");
-        label.className = "platform-item";
-        let isChecked =
-          existingPlatforms.length === 0 || existingPlatforms.includes(p);
-        label.innerHTML = `
-                    <input type="checkbox" name="platform" value="${p}" ${isChecked ? "checked" : ""}>
-                    <div class="custom-checkbox"></div>
-                    <div class="p-dot" style="background: ${colorMap[p] || "var(--text-dim)"}"></div>
-                    <span class="p-label">${p.charAt(0).toUpperCase() + p.slice(1)}</span>
-                `;
-        container.appendChild(label);
-      });
-    }
-
-    let form = document.getElementById("pref-form");
-    if (form) {
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        let submitBtn = form.querySelector('button[type="submit"]');
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Syncing...";
-
-        let captchaResponse = hcaptcha.getResponse();
-        if (!captchaResponse) {
-          showToast("Please complete the CAPTCHA challenge.", "error");
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Start Sync";
-          return;
-        }
-
-        let selected = Array.from(
-          document.querySelectorAll('input[name="platform"]:checked'),
-        ).map((i) => i.value);
-        let useDedicated = false;
-        let useDedicatedCheckbox = document.getElementById("use-dedicated");
-        if (useDedicatedCheckbox) {
-          useDedicated = useDedicatedCheckbox.checked;
-        }
-        try {
-          let res = await securePost("/preferences", {
-            platforms: selected,
-            use_dedicated: useDedicated,
-            "h-captcha-response": captchaResponse,
-          });
-          hcaptcha.reset();
-          if (res) {
-            if (res.changed) {
-              try {
-                let syncRes = await securePost("/sync", {});
-                if (syncRes && syncRes.status === "rate_limited") {
-                  showSuccess(
-                    "Preferences updated! Sync is rate-limited.",
-                    "Since you synced recently, your new choices will be automatically updated on the next hourly schedule.",
-                  );
-                } else {
-                  showSuccess(
-                    "Preferences saved and sync queued!",
-                    "Your calendar is being updated with the new platform selections.",
-                  );
-                }
-              } catch (syncErr) {
+      let selected = Array.from(
+        document.querySelectorAll('input[name="platform"]:checked'),
+      ).map((i) => i.value);
+      let useDedicated = false;
+      let useDedicatedCheckbox = document.getElementById("use-dedicated");
+      if (useDedicatedCheckbox) {
+        useDedicated = useDedicatedCheckbox.checked;
+      }
+      try {
+        let res = await securePost("/preferences", {
+          platforms: selected,
+          use_dedicated: useDedicated,
+          "h-captcha-response": captchaResponse,
+        });
+        hcaptcha.reset();
+        if (res) {
+          if (res.changed && hasCalendarAccess) {
+            try {
+              let syncRes = await securePost("/sync", {});
+              if (syncRes && syncRes.status === "rate_limited") {
                 showSuccess(
-                  "Preferences saved successfully.",
-                  "Calendar updates will apply automatically on the next scheduled run.",
+                  "Preferences updated! Sync is rate-limited.",
+                  "Since you synced recently, your new choices will be automatically updated on the next hourly schedule.",
+                );
+              } else {
+                showSuccess(
+                  "Preferences saved and sync queued!",
+                  "Your calendar is being updated with the new platform selections.",
                 );
               }
-            } else {
+            } catch (syncErr) {
               showSuccess(
-                "Preferences saved!",
-                "Your selections are already up to date. No new sync required.",
+                "Preferences saved successfully.",
+                "Calendar updates will apply automatically on the next scheduled run.",
               );
             }
+          } else {
+            showSuccess(
+              "Preferences saved!",
+              hasCalendarAccess
+                ? "Your selections are already up to date. No new sync required."
+                : "Your platform selections have been updated for your private iCal Feed.",
+            );
+          }
+        }
+      } catch (err) {
+        hcaptcha.reset();
+        showToast(err.message || "An error occurred.", "error");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = isSaveOnly ? "Save Preferences" : "Save & Trigger Sync";
+      }
+    });
+  }
+
+  let delBtn = document.getElementById("delete-account-btn");
+  if (delBtn) {
+    delBtn.addEventListener("click", async () => {
+      const deleteGoogleData = !!document.getElementById("delete-google-data")?.checked;
+      let confirmMsg = "Are you sure? This will remove all your data and stop calendar syncing.";
+      if (deleteGoogleData) {
+        confirmMsg += "\n\nThis will ALSO delete your ContestSync calendar and all synced events from your Google Calendar, and revoke app access permanently.";
+      }
+      if (confirm(confirmMsg)) {
+        try {
+          const res = await fetch(`/account?delete_google_data=${deleteGoogleData}`, {
+            method: "DELETE",
+            headers: { "X-CSRF-Token": getCSRFToken() },
+            credentials: "same-origin",
+          });
+          if (res.ok) {
+            window.location.href = "/";
+          } else {
+            const data = await res.json().catch(() => ({}));
+            alert(`Failed to delete account: ${data.error || res.statusText}`);
           }
         } catch (err) {
-          hcaptcha.reset();
-          showToast(err.message || "An error occurred.", "error");
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Start Sync";
+          console.error("Delete failed", err);
         }
-      });
-    }
-
-    let delBtn = document.getElementById("delete-account-btn");
-    if (delBtn) {
-      delBtn.addEventListener("click", async () => {
-        const deleteGoogleData = !!document.getElementById("delete-google-data")?.checked;
-        let confirmMsg = "Are you sure? This will remove all your data and stop calendar syncing.";
-        if (deleteGoogleData) {
-          confirmMsg += "\n\nThis will ALSO delete your ContestSync calendar and all synced events from your Google Calendar, and revoke app access permanently.";
-        }
-        if (confirm(confirmMsg)) {
-          try {
-            const res = await fetch(`/account?delete_google_data=${deleteGoogleData}`, {
-              method: "DELETE",
-              headers: { "X-CSRF-Token": getCSRFToken() },
-              credentials: "same-origin",
-            });
-            if (res.ok) {
-              window.location.href = "/";
-            } else {
-              const data = await res.json().catch(() => ({}));
-              alert(`Failed to delete account: ${data.error || res.statusText}`);
-            }
-          } catch (err) {
-            console.error("Delete failed", err);
-          }
-        }
-      });
-    }
-  } catch (e) {
-    console.error("Pref: platforms fetch failed", e);
+      }
+    });
   }
 }
 

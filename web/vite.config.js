@@ -14,17 +14,8 @@ export default defineConfig({
       entry: 'src/app.js',
       name: 'App',
       formats: ['iife'],
-      fileName: () => 'app.bundle.js'
+      fileName: () => 'app.bundle.js',
+      cssFileName: 'style.bundle',
     },
-    rollupOptions: {
-      output: {
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'style.css') {
-            return 'style.bundle.css';
-          }
-          return assetInfo.name;
-        }
-      }
-    }
   }
 });

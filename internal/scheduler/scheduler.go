@@ -30,7 +30,7 @@ func New(readDB *pgxpool.Pool, writeDB *pgxpool.Pool, q *queue.Queue) *Scheduler
 }
 
 func (s *Scheduler) Start() {
-	s.Cron.AddFunc("@daily", func() {
+	s.Cron.AddFunc("@every 30m", func() {
 		s.RunExtraction(context.Background())
 	})
 	s.Cron.AddFunc("@daily", func() {
@@ -43,6 +43,8 @@ func (s *Scheduler) Start() {
 		s.CleanupOAuthStates(context.Background())
 	})
 	s.Cron.Start()
+
+	go s.RunExtraction(context.Background())
 }
 
 func (s *Scheduler) PruneOldData(ctx context.Context) {
@@ -52,6 +54,16 @@ func (s *Scheduler) PruneOldData(ctx context.Context) {
 		slog.Error("failed to prune old contests", "error", err)
 	} else {
 		slog.Info("pruned old contests", "count", res.RowsAffected())
+	}
+
+	delUngranted, err := s.WriteDB.Exec(ctx, "DELETE FROM users WHERE (refresh_token IS NULL OR refresh_token = '') AND created_at < NOW() - INTERVAL '24 hours'")
+	if err != nil {
+		slog.Error("failed to prune ungranted users older than 24 hours", "error", err)
+	} else if delUngranted.RowsAffected() > 0 {
+		slog.Info("pruned ungranted users older than 24 hours", "count", delUngranted.RowsAffected())
+		if s.OnEvent != nil {
+			s.OnEvent("CRON_PRUNE_UNGRANTED_USERS", fmt.Sprintf("Pruned %d ungranted user(s) older than 24 hours.", delUngranted.RowsAffected()))
+		}
 	}
 
 	if s.Queue != nil {
@@ -78,7 +90,7 @@ func (s *Scheduler) SyncAllUsers(ctx context.Context) {
 	limit := 500
 	offset := 0
 	for {
-		rows, err := s.ReadDB.Query(ctx, "SELECT id FROM users ORDER BY id LIMIT $1 OFFSET $2", limit, offset)
+		rows, err := s.ReadDB.Query(ctx, "SELECT id FROM users WHERE has_calendar_access = TRUE AND refresh_token IS NOT NULL AND refresh_token != '' ORDER BY id LIMIT $1 OFFSET $2", limit, offset)
 		if err != nil {
 			slog.Error("failed to fetch users for sync", "error", err)
 			return
