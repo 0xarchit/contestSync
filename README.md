@@ -47,7 +47,7 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 
 ### 1. High-Concurrency CloudAMQP LavinMQ Queue Engine
 
-* **Ultra-Light & Blazing Fast**: Powered by CloudAMQP LavinMQ (AMQP 0.9.1), handling up to 40 parallel connection slots per instance with near-zero idle memory footprint (~15MB RAM).
+* **Ultra-Light & Blazing Fast**: Powered by CloudAMQP LavinMQ (AMQP 0.9.1), consuming extraction tasks (concurrency limit 3) and user sync tasks (concurrency limit 10) with near-zero idle memory footprint (~15MB RAM).
 * **Transparent Fallback**: Automatic, zero-configuration fallback to thread-safe in-memory channels (`chan`) when `CLOUDAMQP_URL` is omitted. When neither is configured, tasks run in-memory and unconsumed in-flight tasks may be lost on process restart.
 * **Persistent Task Queuing**: Manages persistent `extraction-tasks` and `sync-tasks` queues with automatic retry handling.
 
@@ -256,6 +256,7 @@ sequenceDiagram
 | `POSTGRES_READ_DB` | Comma-separated Connection URLs for Read Replica Databases | None | `postgres://user:pass@rep1:port/db,postgres://user:pass@rep2:port/db` |
 | `CONNECTION_LIMIT` | Maximum connections allowed in Primary Write pool | `800` | `20` |
 | `CONNECTION_POOL_LIMIT`| Maximum connections allowed per Read Replica Pool | `10000` | `100` |
+| `VALKEY_URI` | Connection URI string for Valkey instance | None | `rediss://default:password@host:port` |
 | `CLOUDAMQP_URL` / `AMQP_URL` | AMQP 0.9.1 connection URL for CloudAMQP LavinMQ (fallback: in-memory) | None | `amqps://user:pass@lemming.rmq.cloudamqp.com/vhost` |
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 Web Application Client ID from Google Cloud Console | None | `abc-123.apps.googleusercontent.com` |
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 Web Application Client Secret from Google Cloud Console | None | `sec_code_xyz` |

@@ -136,15 +136,30 @@ func (h *Handlers) ManualSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, reqErr := http.DefaultClient.Do(req)
-	if reqErr == nil {
-		defer resp.Body.Close()
-		var info struct {
-			Scope string `json:"scope"`
-		}
-		if json.NewDecoder(resp.Body).Decode(&info) == nil && !strings.Contains(info.Scope, "https://www.googleapis.com/auth/calendar") {
-			http.Error(w, `{"error":"google calendar permission scope missing"}`, http.StatusForbidden)
-			return
-		}
+	if reqErr != nil {
+		slog.Warn("tokeninfo transport error during manual sync check", "user_id", userID, "error", reqErr)
+		http.Error(w, `{"error":"unable to verify calendar permissions, please try again"}`, http.StatusServiceUnavailable)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, `{"error":"google calendar permission validation failed"}`, http.StatusForbidden)
+		return
+	}
+
+	var info struct {
+		Scope string `json:"scope"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		slog.Warn("tokeninfo response decode error during manual sync check", "user_id", userID, "error", err)
+		http.Error(w, `{"error":"unable to parse validation response, please try again"}`, http.StatusServiceUnavailable)
+		return
+	}
+
+	if !strings.Contains(info.Scope, "https://www.googleapis.com/auth/calendar") {
+		http.Error(w, `{"error":"google calendar permission scope missing"}`, http.StatusForbidden)
+		return
 	}
 
 	if err := h.Queue.PublishSyncTask(r.Context(), userID); err != nil {
