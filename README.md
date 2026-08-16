@@ -17,7 +17,7 @@
 
 ---
 
-ContestSync is a robust, highly optimized web platform and distributed worker system designed to automatically synchronize competitive programming contests from major platforms directly to Google Calendar. By integrating advanced replication pooling, distributed caching, secure cryptography, and low-latency asset rendering, ContestSync provides developers and competitive programmers with an automated, zero-maintenance scheduling interface.
+ContestSync is a robust, highly optimized web platform and distributed worker system designed to automatically synchronize competitive programming contests from major platforms directly to Google Calendar and private iCal feeds. By integrating self-healing messaging queues, read/write database connection splitting, distributed caching, OpenTelemetry observability, and deterministic sync idempotency, ContestSync provides developers with an automated, zero-maintenance scheduling experience.
 
 ---
 
@@ -35,80 +35,51 @@ ContestSync is a robust, highly optimized web platform and distributed worker sy
 
 ---
 
-## Topological System Architecture
-
-<p align="center">
-  <img src="assets/contestSync_Diagram.gif" alt="ContestSync System Architecture" width="1080" style="border-radius: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.4);" />
-</p>
-
----
-
 ## Core SaaS & Enterprise Capabilities
 
-### 1. High-Concurrency CloudAMQP LavinMQ Queue Engine
+### 1. Self-Healing AMQP Engine & Task Queue Broker
 
-* **Ultra-Light & Blazing Fast**: Powered by CloudAMQP LavinMQ (AMQP 0.9.1), consuming extraction tasks (concurrency limit 3) and user sync tasks (concurrency limit 10) with near-zero idle memory footprint (~15MB RAM).
-* **Transparent Fallback**: Automatic, zero-configuration fallback to thread-safe in-memory channels (`chan`) when neither `AMQP_URL` nor `CLOUDAMQP_URL` is configured, or if AMQP connection initialization fails. When operating in-memory, unconsumed in-flight tasks may be lost on process restart.
-* **Persistent Task Queuing**: Manages persistent `extraction-tasks` and `sync-tasks` queues with automatic retry handling.
+* **Self-Healing Reconnection**: Background AMQP consumers automatically reconnect with exponential backoff upon network disruptions or broker restarts without dropping running processes.
+* **Dedicated Channel Isolation**: Each consumer worker allocates independent, dedicated AMQP channels with strict lifecycle cleanup and isolation.
+* **Deterministic Task Retries**: Tasks track explicit `retry_count` payload metadata with publisher confirmations. Transient failures retry with bounded limits (up to 2 attempts) before poison message discarding.
+* **Transparent In-Memory Fallback**: Zero-configuration fallback to thread-safe Go channels when `AMQP_URL` / `CLOUDAMQP_URL` is absent or during initial dial retries.
 
 ### 2. High-Concurrency Neon DB Read/Write Split Engine
 
-* **Isolation of Concerns**: Database operations are split into separate Write Primary and multiple Read Replica connection pools.
-* **Atomic Round-Robin Distribution**: Reads are distributed across replicas using lock-free atomic round-robin counters, utilizing the Neon DB pool endpoints for high performance.
-* **Massive Concurrency Support**: Integrates PgBouncer configurations, allowing up to 10,000 concurrent pooled connections per read replica, while direct connections are preserved for write paths and migrations.
-* **In-Memory CA Validation**: Implements in-memory PEM certificate loading for database connections, avoiding disk leakage issues.
+* **Isolation of Concerns**: Database operations are strictly partitioned into a Write Primary pool (`pgxpool`) and multiple Read Replica connection pools.
+* **Atomic Round-Robin Distribution**: Read queries are load-balanced across read replicas using lock-free atomic counters for optimal throughput.
+* **Massive Concurrency Support**: Configured for PgBouncer connection pooling, supporting thousands of concurrent pooled queries on read replicas while direct connections handle write transactions and migrations.
 
 ### 3. Multi-Tier Distributed Valkey Caching Model
 
 | Caching Area | Cache Key Format | Time To Live (TTL) | Eviction Trigger | Storage Format |
 | :--- | :--- | :--- | :--- | :--- |
-| **Contests List** | `cache:contests:<platform>` | 12 Hours | Crawler batch finished | JSON Contest Array |
-| **User Preferences** | `cache:user:v2:<userID>` | 24 Hours | Google OAuth callback / Preferences save / Account deletion | JSON Profile Struct |
-| **Calendar Validation**| `user:cal_val:<userID>` | 15 Min (Success/Credential) / 1 Min (Operational) | Google OAuth login / Token Revocation | JSON Status Struct |
+| **Contests List** | `cache:contests:<platform>` | 12 Hours | Crawler batch completed | JSON Contest Array |
+| **User Preferences** | `cache:user:v2:<userID>` | 24 Hours | Google OAuth login / Preferences save / Account deletion | JSON Profile Struct |
+| **Calendar Validation**| `user:cal_val:<userID>` | 15 Min (Success/Credential) / 1 Min (Operational) | Google OAuth login / Token Revocation / Scope check | JSON Status Struct |
 | **Synced Events** | `cache:synced_events:<userID>` | 24 Hours | End of SyncUser run (if new sync recorded) | JSON String Array |
 | **Platforms List**| `cache:platforms` | 24 Hours | Static Compile (None) | Pre-serialized JSON |
 | **IP Rate Limiter** | `ratelimit:<route_pattern>:<ip>` | Variable (Dynamic) | Auto-Expires on window end | Numeric string counter |
 | **User Sessions** | `session:<session_id>` | 7 Days | Account logout | Encoded Gorilla Session |
 
-### 4. Cached Calendar Scope Validation & 24h Ungranted User Pruning
+### 4. Multi-Session Consistency & OAuth Scope Management
 
-* **Cached Scope Verification**: `GET /auth/calendar/validate` checks user Google Calendar access and returns cached validation status from Valkey (`user:cal_val:<userID>`, 15m for valid/credential failure, 1m for operational failure), invalidated on OAuth login or token revoke.
-* **Frontend Warning State**: Displays explicit **Google Calendar Access Missing** alerts for missing/revoked tokens and **Temporary Calendar Service Issues** for API outages.
-* **24-Hour Automated Cleanup**: Background cron task automatically deletes accounts with ungranted tokens (`refresh_token IS NULL`) after 24 hours to prevent orphan DB records.
+* **Multi-Session Concurrency**: Supports simultaneous active logins across multiple devices without scope drift or token invalidation.
+* **Guaranteed Refresh Tokens**: Enforces `prompt=consent` during Google OAuth authorization to ensure valid `refresh_token` issuance across all active sessions.
+* **Cached Scope Verification**: Validates Google Calendar API access on demand (`GET /auth/calendar/validate`) with cached Valkey status (`user:cal_val:<userID>`), alerting users to missing permissions or transient API issues.
+* **Automated Account Pruning**: Scheduled background cron task automatically deletes ungranted user records (`refresh_token IS NULL`) after 24 hours to prevent database clutter.
 
 ### 5. Scheduled Contest Overwrite & Obsolete Contest Pruning
 
-* **Dynamic Pruning**: When scrapers run, a cleanup operation is executed: `DELETE FROM contests WHERE platform = $1 AND start_time > NOW() AND id != ALL($2)`. This deletes upcoming contests that were rescheduled or cancelled on the host platform.
-* **Boundary Integrity**: The prune query is locked to upcoming contests (`start_time > NOW()`). This preserves past contests and their synced events, preventing redundant event syncs or double-syncing.
-* **Safe Overwrite**: If a scrape returns zero upcoming contests, future scheduled entries for that platform are preserved to protect against API blocks or temporary empty responses.
+* **Dynamic Pruning**: When scrapers run, a cleanup query (`DELETE FROM contests WHERE platform = $1 AND start_time > NOW() AND id != ALL($2)`) automatically purges rescheduled or cancelled contests.
+* **Boundary Integrity**: Pruning is locked to future contests (`start_time > NOW()`), preserving historical records and avoiding redundant calendar re-syncs.
+* **Safe Overwrite**: If a scraper returns zero contests (e.g., during platform downtime), existing scheduled entries are preserved to prevent accidental deletion.
 
----
+### 6. Full-Stack Observability & Non-Blocking Telemetry
 
-## Detailed Environment Configurations
-
-| Environment Variable | Description | Default Value | Example Value |
-| :--- | :--- | :--- | :--- |
-| `POSTGRES_DB` | Connection URL for Primary Write Postgres Database | None (Required) | `postgres://user:pass@host:port/db?sslmode=require` |
-| `POSTGRES_READ_DB` | Comma-separated Connection URLs for Read Replica Databases | None | `postgres://user:pass@rep1:port/db,postgres://user:pass@rep2:port/db` |
-| `CONNECTION_LIMIT` | Maximum connections allowed in Primary Write pool | `800` | `20` |
-| `CONNECTION_POOL_LIMIT`| Maximum connections allowed per Read Replica Pool | `10000` | `100` |
-| `VALKEY_URI` | Connection URI string for Valkey instance | None | `rediss://default:password@host:port` |
-| `CLOUDAMQP_URL` / `AMQP_URL` | AMQP 0.9.1 connection URL for CloudAMQP LavinMQ (fallback: in-memory) | None | `amqps://user:pass@lemming.rmq.cloudamqp.com/vhost` |
-| `GOOGLE_CLIENT_ID` | OAuth 2.0 Web Application Client ID from Google Cloud Console | None | `abc-123.apps.googleusercontent.com` |
-| `GOOGLE_CLIENT_SECRET` | OAuth 2.0 Web Application Client Secret from Google Cloud Console | None | `sec_code_xyz` |
-| `GOOGLE_REDIRECT_URL` | Redirect Callback URL registered in Google API credentials | None | `http://localhost:8080/auth/google/callback` |
-| `SESSION_SECRET` | 32-byte (64 hex characters) key for Gorilla Cookie / Valkey Sessions | None | `<64-hex-character-secret>` (generate via `openssl rand -hex 32`) |
-| `ENCRYPTION_KEY` | 32-byte (64 hex characters) key for AES Refresh Token encryption | None | `<64-hex-character-secret>` (generate via `openssl rand -hex 32`) |
-| `ADMIN_PASSWORD` | Standard password for admin panel authentication | None | `adm_pwd_secure` |
-| `TRUST_PROXY` | Gated verification trust toggle for client IP forwarding | `false` | `true` |
-| `TELEGRAM_PROXY_URL` | Outbound Proxy target for forwarding warnings/errors | None | `https://tg-proxy.myorg.workers.dev` |
-| `PROXY_SECRET_KEY` | Token key for proxy HTTP authorization | None | `sec_key_abc` |
-| `TELEGRAM_GROUP_ID` | Group Identifier target for slog alerts | None | `-1002938475` |
-| `TELEGRAM_GROUP_TOPIC_ID`| Topic Thread ID inside Telemetry Group | None | `12` |
-| `FROM_ENV` | Application node identifier string for diagnostics | None | `Server-Node-Staging` |
-| `PORT` | API Web Server HTTP listener port | `8080` | `7860` |
-| `WORKER_PORT` | Background Worker Micro-Health server HTTP port | `8081` | `8082` |
-| `ENV` | System execution environment gating flag | `production` | `development` |
+* **OpenTelemetry OTLP Push Exporter**: Emits system metrics and traces to any standard OTLP collector with exponential backoff retry and request timeout alignment.
+* **Bounded Non-Blocking Shutdown**: Provider shutdowns execute concurrently under a strict 5-second deadline context to prevent unresponsive collectors from hanging process exits.
+* **Real-time Telegram Alerts**: Asynchronous error and warning dispatching via Telegram bot telemetry topics.
 
 ---
 
@@ -131,7 +102,7 @@ sequenceDiagram
     Server->>Server: Generate secure random state token
     Server->>DB_Write: Store state: INSERT INTO oauth_states (state)
     Server->>Browser: Set secure HttpOnly 'oauth_state' cookie
-    Server->>Browser: Redirect to Google OAuth consent page
+    Server->>Browser: Redirect to Google OAuth consent page (prompt=consent)
     Browser->>GoogleAuth: Direct browser request with client_id, scopes, and state
     GoogleAuth->>User: Render permissions consent dialog
     User->>GoogleAuth: Authorize request (Calendar & Profile scopes)
@@ -145,7 +116,7 @@ sequenceDiagram
     Server->>Server: Encrypt Refresh Token using AES-256-GCM
     Server->>DB_Write: Upsert User Profile: INSERT/UPDATE users table
     DB_Write-->>Server: Return active user_id
-    Server->>Valkey: Evict stale profile: DEL cache:user:id
+    Server->>Valkey: Evict stale profile: DEL cache:user:v2:id
     Server->>Server: Rotate and regenerate Session ID
     Server->>Valkey: Write dynamic session payload: SET session:session_id
     Server->>Browser: Set secure HttpOnly Session cookie
@@ -160,8 +131,8 @@ sequenceDiagram
     actor User as Competitive Programmer
     participant Browser as Web Browser
     participant Server as Server Binary (cmd/server)
-    participant Queue as Queue Broker (LavinMQ / In-Memory)
-    participant Worker as Background Worker (cmd/worker / cmd/server)
+    participant Queue as Queue Broker (AMQP / In-Memory)
+    participant Worker as Background Worker (cmd/worker)
     participant Valkey as Valkey Cache
     participant DB_Read as Neon DB Replicas (Round-Robin)
     participant DB_Write as Neon DB Primary
@@ -177,13 +148,13 @@ sequenceDiagram
     Queue->>Worker: Consume sync task: ConsumeSyncTask(user_id)
     Worker->>Valkey: Acquire lock: SetNX lock:sync:user_id (TTL=5m)
     alt Lock Acquired successfully
-        Worker->>Valkey: Query cached profile: GET cache:user:user_id
+        Worker->>Valkey: Query cached profile: GET cache:user:v2:user_id
         alt Cache Hit
             Valkey-->>Worker: Return profile data
         else Cache Miss
             Worker->>DB_Read: SELECT profile & encrypted token from Replicas
             DB_Read-->>Worker: Return database user record
-            Worker->>Valkey: SET cache:user:user_id (24h TTL)
+            Worker->>Valkey: SET cache:user:v2:user_id (24h TTL)
         end
         Worker->>Worker: Decrypt Google OAuth Refresh Token (AES-256-GCM)
         Worker->>DB_Write: Update sync status: UPDATE users SET sync_status = 'syncing'
@@ -237,13 +208,13 @@ sequenceDiagram
 │   ├── auth  ─────────── Cryptographic AES-256-GCM Encryption/Decryption Modules
 │   ├── db  ───────────── Database Initializer, Pool Splits, Replica Round-Robin counters
 │   ├── extractor  ────── Platform-Specific HTML/JSON Fetchers & Active Parsers
-│   ├── queue  ────────── CloudAMQP LavinMQ / In-Memory Fallback Queue Broker
-│   ├── observability  ── Asynchronous Telegram Warnings and Error Diagnostics Telemetry
+│   ├── queue  ────────── Self-Healing AMQP Broker / In-Memory Fallback Queue
+│   ├── observability  ── OpenTelemetry OTLP Push Exporter & Asynchronous Telegram Telemetry
 │   ├── scheduler  ────── robfig/cron background trigger orchestration
 │   └── sync  ─────────── Synchronization Engine & Deterministic Google Calendar Sync
 ├── migrations  ───────── Database Initialization Schema Definitions
 ├── models  ───────────── Global Struct Definitions, Key Formatter & Cache constants
-└── web  ──────────────── Frontend HTML, GSAP Animations, Lenis, and Custom CSS
+└── web  ──────────────── Frontend HTML, GSAP Animations, Lenis, Bun Bundler, and Custom CSS
 ```
 
 ---
@@ -257,7 +228,7 @@ sequenceDiagram
 | `CONNECTION_LIMIT` | Maximum connections allowed in Primary Write pool | `800` | `20` |
 | `CONNECTION_POOL_LIMIT`| Maximum connections allowed per Read Replica Pool | `10000` | `100` |
 | `VALKEY_URI` | Connection URI string for Valkey instance | None | `rediss://default:password@host:port` |
-| `CLOUDAMQP_URL` / `AMQP_URL` | AMQP 0.9.1 connection URL for CloudAMQP LavinMQ (fallback: in-memory) | None | `amqps://user:pass@lemming.rmq.cloudamqp.com/vhost` |
+| `CLOUDAMQP_URL` / `AMQP_URL` | AMQP 0.9.1 connection URL for RabbitMQ/LavinMQ (fallback: in-memory) | None | `amqps://user:pass@lemming.rmq.cloudamqp.com/vhost` |
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 Web Application Client ID from Google Cloud Console | None | `abc-123.apps.googleusercontent.com` |
 | `GOOGLE_CLIENT_SECRET` | OAuth 2.0 Web Application Client Secret from Google Cloud Console | None | `sec_code_xyz` |
 | `GOOGLE_REDIRECT_URL` | Redirect Callback URL registered in Google API credentials | None | `http://localhost:8080/auth/google/callback` |
@@ -265,18 +236,29 @@ sequenceDiagram
 | `ENCRYPTION_KEY` | 32-byte (64 hex characters) key for AES Refresh Token encryption | None | `<64-hex-character-secret>` (generate via `openssl rand -hex 32`) |
 | `ADMIN_PASSWORD` | Standard password for admin panel authentication | None | `adm_pwd_secure` |
 | `TRUST_PROXY` | Gated verification trust toggle for client IP forwarding | `false` | `true` |
-| `TELEGRAM_PROXY_URL` | Outbound Proxy target for forwarding warnings/errors | None | `https://tg-proxy.myorg.workers.dev` |
+| `TG_PROXY_URL` | Outbound Proxy target for forwarding Telegram warnings/errors | None | `https://tg-proxy.myorg.workers.dev` |
 | `PROXY_SECRET_KEY` | Token key for proxy HTTP authorization | None | `sec_key_abc` |
-| `TELEGRAM_GROUP_ID` | Group Identifier target for slog alerts | None | `-1002938475` |
-| `TELEGRAM_GROUP_TOPIC_ID`| Topic Thread ID inside Telemetry Group | None | `12` |
-| `FROM_ENV` | Application node identifier string for diagnostics | None | `Server-Node-Staging` |
+| `TG_GROUP_ID` | Group Identifier target for slog alerts | None | `-1002938475` |
+| `TG_GROUP_TOPIC_ID`| Topic Thread ID inside Telemetry Group | None | `12` |
+| `FROM` | Application node identifier string for diagnostics | None | `Server-Node-Staging` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | HTTP URL endpoint for OTLP push exporter (optional) | None | `https://otlp.datadoghq.com` |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Comma-separated headers / API keys for OTLP exporter | None | `api-key=xyz123,header=val` |
 | `PORT` | API Web Server HTTP listener port | `8080` | `7860` |
 | `WORKER_PORT` | Background Worker Micro-Health server HTTP port | `8081` | `8082` |
-| `ENV` | System execution environment gating flag | `production` | `development` |
+| `ENV` | System execution environment gating flag | `development` | `production` |
 
 ---
 
 ## Execution and Compilation
+
+### Build Frontend Assets Locally (Bun)
+
+```powershell
+cd web
+bun install
+bun run build
+cd ..
+```
 
 ### Compile and Start API Server Locally
 
@@ -312,3 +294,4 @@ docker compose up --build
 ## License
 
 MIT © 2026 ContestSync. See [LICENSE](LICENSE) for details.
+
