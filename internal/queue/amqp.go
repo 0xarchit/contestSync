@@ -48,6 +48,7 @@ type Queue struct {
 	syncCh          chan int
 	wg              stdSync.WaitGroup
 	mu              stdSync.RWMutex
+	connMu          stdSync.Mutex
 	OnTelegramEvent func(event, details string)
 }
 
@@ -78,6 +79,9 @@ func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, err
 }
 
 func (q *Queue) connectAMQP() error {
+	q.connMu.Lock()
+	defer q.connMu.Unlock()
+
 	q.mu.RLock()
 	if q.isClosed {
 		q.mu.RUnlock()
@@ -287,6 +291,7 @@ func (q *Queue) runSelfHealingExtractionConsumer(ctx context.Context) {
 		if err := ch.Qos(3, 0, false); err != nil {
 			slog.Warn("failed to set Qos for extraction consumer, reconnecting...", "error", err)
 			_ = q.reconnectWithBackoff(ctx)
+			time.Sleep(1 * time.Second)
 			continue
 		}
 
@@ -302,6 +307,7 @@ func (q *Queue) runSelfHealingExtractionConsumer(ctx context.Context) {
 		if err != nil {
 			slog.Warn("failed to start AMQP extraction consumer, reconnecting...", "error", err)
 			_ = q.reconnectWithBackoff(ctx)
+			time.Sleep(1 * time.Second)
 			continue
 		}
 
@@ -333,8 +339,10 @@ func (q *Queue) runSelfHealingExtractionConsumer(ctx context.Context) {
 					defer q.wg.Done()
 					defer func() { <-sem }()
 					if err := q.handleExtraction(ctx, plat); err != nil {
-						slog.Error("extraction task failed in consumer, re-queuing", "platform", plat, "error", err)
-						if nackErr := d.Nack(false, true); nackErr != nil {
+						slog.Error("extraction task failed in consumer", "platform", plat, "redelivered", d.Redelivered, "error", err)
+						// Requeue only on first failure; if already redelivered, discard to prevent poison message loops
+						requeue := !d.Redelivered
+						if nackErr := d.Nack(false, requeue); nackErr != nil {
 							slog.Error("failed to nack extraction delivery", "error", nackErr)
 						}
 						return
@@ -390,6 +398,7 @@ func (q *Queue) runSelfHealingSyncConsumer(ctx context.Context) {
 		if err := ch.Qos(10, 0, false); err != nil {
 			slog.Warn("failed to set Qos for sync consumer, reconnecting...", "error", err)
 			_ = q.reconnectWithBackoff(ctx)
+			time.Sleep(1 * time.Second)
 			continue
 		}
 
@@ -405,6 +414,7 @@ func (q *Queue) runSelfHealingSyncConsumer(ctx context.Context) {
 		if err != nil {
 			slog.Warn("failed to start AMQP sync consumer, reconnecting...", "error", err)
 			_ = q.reconnectWithBackoff(ctx)
+			time.Sleep(1 * time.Second)
 			continue
 		}
 
@@ -436,8 +446,10 @@ func (q *Queue) runSelfHealingSyncConsumer(ctx context.Context) {
 					defer q.wg.Done()
 					defer func() { <-sem }()
 					if err := q.Syncer.SyncUser(ctx, uid); err != nil {
-						slog.Error("sync failed in consumer, re-queuing", "user_id", uid, "error", err)
-						if nackErr := d.Nack(false, true); nackErr != nil {
+						slog.Error("sync failed in consumer", "user_id", uid, "redelivered", d.Redelivered, "error", err)
+						// Requeue only on first failure; if already redelivered, discard to prevent poison message loops
+						requeue := !d.Redelivered
+						if nackErr := d.Nack(false, requeue); nackErr != nil {
 							slog.Error("failed to nack sync delivery", "error", nackErr)
 						}
 						return
