@@ -2,9 +2,12 @@ package observability
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -77,6 +80,13 @@ func InitOTel(serviceName string) *OTelMetrics {
 	opts := []otlpmetrichttp.Option{
 		otlpmetrichttp.WithEndpoint(trimmedEndpoint),
 		otlpmetrichttp.WithURLPath(urlPath),
+		otlpmetrichttp.WithTimeout(15 * time.Second),
+		otlpmetrichttp.WithRetry(otlpmetrichttp.RetryConfig{
+			Enabled:         true,
+			InitialInterval: 2 * time.Second,
+			MaxInterval:     15 * time.Second,
+			MaxElapsedTime:  60 * time.Second,
+		}),
 	}
 	if strings.HasPrefix(endpoint, "http://") {
 		opts = append(opts, otlpmetrichttp.WithInsecure())
@@ -94,6 +104,13 @@ func InitOTel(serviceName string) *OTelMetrics {
 	traceOpts := []otlptracehttp.Option{
 		otlptracehttp.WithEndpoint(trimmedEndpoint),
 		otlptracehttp.WithURLPath(traceUrlPath),
+		otlptracehttp.WithTimeout(15 * time.Second),
+		otlptracehttp.WithRetry(otlptracehttp.RetryConfig{
+			Enabled:         true,
+			InitialInterval: 2 * time.Second,
+			MaxInterval:     15 * time.Second,
+			MaxElapsedTime:  60 * time.Second,
+		}),
 	}
 	if strings.HasPrefix(endpoint, "http://") {
 		traceOpts = append(traceOpts, otlptracehttp.WithInsecure())
@@ -121,7 +138,11 @@ func InitOTel(serviceName string) *OTelMetrics {
 
 	provider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithResource(res),
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(15*time.Second))),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(
+			exporter,
+			sdkmetric.WithInterval(30*time.Second),
+			sdkmetric.WithTimeout(70*time.Second),
+		)),
 	)
 	otel.SetMeterProvider(provider)
 
@@ -129,7 +150,11 @@ func InitOTel(serviceName string) *OTelMetrics {
 	if traceExporter != nil {
 		tracerProvider = sdktrace.NewTracerProvider(
 			sdktrace.WithResource(res),
-			sdktrace.WithBatcher(traceExporter),
+			sdktrace.WithBatcher(
+				traceExporter,
+				sdktrace.WithBatchTimeout(30*time.Second),
+				sdktrace.WithExportTimeout(70*time.Second),
+			),
 		)
 		otel.SetTracerProvider(tracerProvider)
 	}
@@ -162,11 +187,35 @@ func InitOTel(serviceName string) *OTelMetrics {
 		SyncCounter:             syncCounter,
 		CalendarValidateCounter: validateCounter,
 		Shutdown: func(ctx context.Context) error {
-			_ = provider.Shutdown(ctx)
+			var wg sync.WaitGroup
+			errCh := make(chan error, 2)
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := provider.Shutdown(ctx); err != nil {
+					errCh <- fmt.Errorf("meter provider shutdown: %w", err)
+				}
+			}()
+
 			if tracerProvider != nil {
-				_ = tracerProvider.Shutdown(ctx)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					if err := tracerProvider.Shutdown(ctx); err != nil {
+						errCh <- fmt.Errorf("tracer provider shutdown: %w", err)
+					}
+				}()
 			}
-			return nil
+
+			wg.Wait()
+			close(errCh)
+
+			var errs []error
+			for err := range errCh {
+				errs = append(errs, err)
+			}
+			return errors.Join(errs...)
 		},
 	}
 }

@@ -215,7 +215,12 @@ func (h *Handlers) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, cookie)
 
-	url := h.AuthProvider.Config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+	url := h.AuthProvider.Config.AuthCodeURL(
+		state,
+		oauth2.AccessTypeOffline,
+		oauth2.ApprovalForce,
+		oauth2.SetAuthURLParam("prompt", "consent"),
+	)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
@@ -510,7 +515,7 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	hSum := sha256.Sum256([]byte(fmt.Sprintf("%dical_feed_secret", cachedUser.ID)))
+	hSum := sha256.Sum256(fmt.Appendf(nil, "%dical_feed_secret", cachedUser.ID))
 	feedToken := hex.EncodeToString(hSum[:])
 
 	var userResp struct {
@@ -947,7 +952,7 @@ func (h *Handlers) ServeICalFeed(w http.ResponseWriter, r *http.Request) {
 			var uID int
 			var pList []string
 			if err := rows.Scan(&uID, &pList); err == nil {
-				hSum := sha256.Sum256([]byte(fmt.Sprintf("%dical_feed_secret", uID)))
+				hSum := sha256.Sum256(fmt.Appendf(nil, "%dical_feed_secret", uID))
 				computedToken := hex.EncodeToString(hSum[:])
 				if computedToken == token || fmt.Sprintf("%d", uID) == token {
 					platforms = pList

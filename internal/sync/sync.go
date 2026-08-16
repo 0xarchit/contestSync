@@ -471,7 +471,7 @@ func (s *Syncer) SyncUser(ctx context.Context, userID int) (retErr error) {
 
 func GenerateDeterministicEventID(googleID string, contestID string) string {
 	hasher := md5.New()
-	hasher.Write([]byte(fmt.Sprintf("%s_%s", googleID, contestID)))
+	hasher.Write(fmt.Appendf(nil, "%s_%s", googleID, contestID))
 	return strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(hasher.Sum(nil)))
 }
 

@@ -55,7 +55,13 @@ func main() {
 
 	otelMetrics := observability.InitOTel("contestsync-worker")
 	if otelMetrics != nil && otelMetrics.Shutdown != nil {
-		defer otelMetrics.Shutdown(context.Background())
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := otelMetrics.Shutdown(shutdownCtx); err != nil {
+				slog.Error("OTel shutdown returned error", "error", err)
+			}
+		}()
 	}
 
 	if len(cfg.EncryptionKey) != 32 {
