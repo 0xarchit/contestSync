@@ -306,9 +306,14 @@ async function initPreferences() {
       }
 
       if (me.ical_feed_url) {
-        let fullFeedURL = window.location.origin + me.ical_feed_url;
+        let fullFeedURL = me.ical_feed_url.startsWith("http")
+          ? me.ical_feed_url
+          : window.location.origin + (me.ical_feed_url.startsWith("/") ? "" : "/") + me.ical_feed_url;
         let feedInput = document.getElementById("ical-feed-input");
-        if (feedInput) feedInput.value = fullFeedURL;
+        if (feedInput) {
+          feedInput.value = fullFeedURL;
+          feedInput.setAttribute("value", fullFeedURL);
+        }
 
         let copyBtn = document.getElementById("copy-ical-btn");
         if (copyBtn) {
@@ -318,6 +323,16 @@ async function initPreferences() {
               if (statusEl) {
                 statusEl.textContent = "✓ Feed URL copied to clipboard!";
                 setTimeout(() => { statusEl.textContent = ""; }, 3000);
+              }
+            }).catch(() => {
+              if (feedInput) {
+                feedInput.select();
+                document.execCommand("copy");
+                let statusEl = document.getElementById("copy-ical-status");
+                if (statusEl) {
+                  statusEl.textContent = "✓ Feed URL copied to clipboard!";
+                  setTimeout(() => { statusEl.textContent = ""; }, 3000);
+                }
               }
             });
           };
