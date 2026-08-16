@@ -215,7 +215,12 @@ func (h *Handlers) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, cookie)
 
-	url := h.AuthProvider.Config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+	url := h.AuthProvider.Config.AuthCodeURL(
+		state,
+		oauth2.AccessTypeOffline,
+		oauth2.ApprovalForce,
+		oauth2.SetAuthURLParam("prompt", "consent"),
+	)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
