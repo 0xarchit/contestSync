@@ -29,9 +29,18 @@ def get_commit_data():
         if not tags:
             log_range = ["git", "log", "--pretty=format:%h"]
         elif len(tags) >= 2:
-            log_range = ["git", "log", f"{tags[1]}..{tags[0]}", "--pretty=format:%h"]
+            # Check if there are commits between the latest tag and HEAD, otherwise use the range between latest two tags
+            head_commits = subprocess.check_output(["git", "log", f"{tags[0]}..HEAD", "--pretty=format:%h"]).decode(errors="ignore").split()
+            if head_commits:
+                log_range = ["git", "log", f"{tags[0]}..HEAD", "--pretty=format:%h"]
+            else:
+                log_range = ["git", "log", f"{tags[1]}..{tags[0]}", "--pretty=format:%h"]
         else:
-            log_range = ["git", "log", tags[0], "--pretty=format:%h"]
+            head_commits = subprocess.check_output(["git", "log", f"{tags[0]}..HEAD", "--pretty=format:%h"]).decode(errors="ignore").split()
+            if head_commits:
+                log_range = ["git", "log", f"{tags[0]}..HEAD", "--pretty=format:%h"]
+            else:
+                log_range = ["git", "log", tags[0], "--pretty=format:%h"]
 
         hashes = subprocess.check_output(log_range).decode(errors="ignore").split()
         commit_data = []
@@ -71,6 +80,8 @@ def call_ai_with_retries(endpoint_url, api_token, payload, max_retries=3):
     headers = {
         "Authorization": f"Bearer {api_token}",
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/0xarchit/contestSync",
+        "X-Title": "ContestSync Release Notes Generator",
     }
     for attempt in range(max_retries):
         try:
@@ -154,9 +165,9 @@ def main():
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a technical lead. Summarize these commits and their code changes into clear bullet points. Focus on Features, Fixes, and Refactors. No emojis. Technical tone only.",
+                        "content": "You are an automated release notes generator. Provide immediate markdown bullet points summarizing these commits and diffs under Features, Fixes, and Refactors. Do NOT ask clarifying questions or acknowledge instructions.",
                     },
-                    {"role": "user", "content": f"Commits and diffs:\n{chunk}"},
+                    {"role": "user", "content": f"Commits and diffs to summarize:\n{chunk}"},
                 ],
                 "temperature": 0.2,
                 "max_tokens": 1024,
@@ -166,29 +177,32 @@ def main():
                 summaries.append(summary)
             time.sleep(1)
 
-        combined_summaries = "\n\n".join(summaries)
+        combined_summaries = "\n\n".join(summaries).strip()
+        if not combined_summaries:
+            combined_summaries = raw_changelog
+
         final_payload = {
             "model": api_model,
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a professional software release manager. Create a high-quality GitHub release description from the provided summaries. Use headers: ## Key Features, ## Bug Fixes, and ## Technical Improvements. Strictly NO emojis. Use a clean, engineering-focused tone.",
+                    "content": "You are an automated GitHub release description generator. Output ONLY the release markdown with headers ## Key Features, ## Bug Fixes, and ## Technical Improvements. Do NOT output conversational filler or ask for input.",
                 },
                 {
                     "role": "user",
-                    "content": f"Partial summaries:\n{combined_summaries}",
+                    "content": f"Generate the release notes from these change summaries:\n\n{combined_summaries}",
                 },
             ],
-            "temperature": 0.3,
+            "temperature": 0.2,
             "max_tokens": 2048,
         }
         final_notes = call_ai_with_retries(endpoint_url, api_token, final_payload)
-        if final_notes:
+        if final_notes and len(final_notes.strip()) > 20:
             with open(output_file, "w", encoding="utf-8") as f:
-                f.write(final_notes)
-            print("Successfully generated release notes via NVIDIA NIM / OpenAI-compatible API.")
+                f.write(final_notes.strip())
+            print("Successfully generated release notes.")
         else:
-            raise Exception("Empty AI response received.")
+            raise Exception("Empty or insufficient AI response received.")
     except Exception as e:
         print(f"Fallback to raw changelog due to error: {e}")
         with open(output_file, "w", encoding="utf-8") as f:
