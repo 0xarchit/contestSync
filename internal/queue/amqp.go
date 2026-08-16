@@ -394,10 +394,12 @@ func (q *Queue) runSelfHealingExtractionConsumer(ctx context.Context) {
 				}(msg, task)
 
 			case <-ctx.Done():
+				_ = ch.Close()
 				return
 			}
 		}
 
+		_ = ch.Close()
 		time.Sleep(1 * time.Second)
 	}
 }
@@ -540,10 +542,12 @@ func (q *Queue) runSelfHealingSyncConsumer(ctx context.Context) {
 				}(msg, task)
 
 			case <-ctx.Done():
+				_ = ch.Close()
 				return
 			}
 		}
 
+		_ = ch.Close()
 		time.Sleep(1 * time.Second)
 	}
 }
