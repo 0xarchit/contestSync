@@ -27,11 +27,13 @@ const (
 )
 
 type ExtractionTask struct {
-	Platform string `json:"platform"`
+	Platform   string `json:"platform"`
+	RetryCount int    `json:"retry_count,omitempty"`
 }
 
 type SyncTask struct {
-	UserID int `json:"user_id"`
+	UserID     int `json:"user_id"`
+	RetryCount int `json:"retry_count,omitempty"`
 }
 
 type Queue struct {
@@ -335,22 +337,36 @@ func (q *Queue) runSelfHealingExtractionConsumer(ctx context.Context) {
 
 				sem <- struct{}{}
 				q.wg.Add(1)
-				go func(d amqp.Delivery, plat string) {
+				go func(d amqp.Delivery, t ExtractionTask) {
 					defer q.wg.Done()
 					defer func() { <-sem }()
-					if err := q.handleExtraction(ctx, plat); err != nil {
-						slog.Error("extraction task failed in consumer", "platform", plat, "redelivered", d.Redelivered, "error", err)
-						// Requeue only on first failure; if already redelivered, discard to prevent poison message loops
-						requeue := !d.Redelivered
-						if nackErr := d.Nack(false, requeue); nackErr != nil {
-							slog.Error("failed to nack extraction delivery", "error", nackErr)
+					if err := q.handleExtraction(ctx, t.Platform); err != nil {
+						slog.Error("extraction task failed in consumer", "platform", t.Platform, "retry_count", t.RetryCount, "error", err)
+						if t.RetryCount < 2 {
+							t.RetryCount++
+							if retryBody, mErr := json.Marshal(t); mErr == nil {
+								q.mu.RLock()
+								ch := q.AMQPChannel
+								q.mu.RUnlock()
+								if ch != nil && !ch.IsClosed() {
+									_ = ch.PublishWithContext(ctx, "", QueueExtraction, false, false, amqp.Publishing{
+										ContentType:  "application/json",
+										DeliveryMode: amqp.Persistent,
+										Body:         retryBody,
+									})
+								}
+							}
+						}
+						// Always Ack the current delivery since we either re-published with incremented count or exhausted retries
+						if ackErr := d.Ack(false); ackErr != nil {
+							slog.Error("failed to ack failed extraction delivery", "error", ackErr)
 						}
 						return
 					}
 					if ackErr := d.Ack(false); ackErr != nil {
 						slog.Error("failed to ack extraction delivery", "error", ackErr)
 					}
-				}(msg, task.Platform)
+				}(msg, task)
 
 			case <-ctx.Done():
 				return
@@ -442,22 +458,36 @@ func (q *Queue) runSelfHealingSyncConsumer(ctx context.Context) {
 
 				sem <- struct{}{}
 				q.wg.Add(1)
-				go func(d amqp.Delivery, uid int) {
+				go func(d amqp.Delivery, t SyncTask) {
 					defer q.wg.Done()
 					defer func() { <-sem }()
-					if err := q.Syncer.SyncUser(ctx, uid); err != nil {
-						slog.Error("sync failed in consumer", "user_id", uid, "redelivered", d.Redelivered, "error", err)
-						// Requeue only on first failure; if already redelivered, discard to prevent poison message loops
-						requeue := !d.Redelivered
-						if nackErr := d.Nack(false, requeue); nackErr != nil {
-							slog.Error("failed to nack sync delivery", "error", nackErr)
+					if err := q.Syncer.SyncUser(ctx, t.UserID); err != nil {
+						slog.Error("sync failed in consumer", "user_id", t.UserID, "retry_count", t.RetryCount, "error", err)
+						if t.RetryCount < 2 {
+							t.RetryCount++
+							if retryBody, mErr := json.Marshal(t); mErr == nil {
+								q.mu.RLock()
+								ch := q.AMQPChannel
+								q.mu.RUnlock()
+								if ch != nil && !ch.IsClosed() {
+									_ = ch.PublishWithContext(ctx, "", QueueSync, false, false, amqp.Publishing{
+										ContentType:  "application/json",
+										DeliveryMode: amqp.Persistent,
+										Body:         retryBody,
+									})
+								}
+							}
+						}
+						// Always Ack the current delivery since we either re-published with incremented count or exhausted retries
+						if ackErr := d.Ack(false); ackErr != nil {
+							slog.Error("failed to ack failed sync delivery", "error", ackErr)
 						}
 						return
 					}
 					if ackErr := d.Ack(false); ackErr != nil {
 						slog.Error("failed to ack sync delivery", "error", ackErr)
 					}
-				}(msg, task.UserID)
+				}(msg, task)
 
 			case <-ctx.Done():
 				return

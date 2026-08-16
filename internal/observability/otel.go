@@ -2,6 +2,8 @@ package observability
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -184,11 +186,16 @@ func InitOTel(serviceName string) *OTelMetrics {
 		SyncCounter:             syncCounter,
 		CalendarValidateCounter: validateCounter,
 		Shutdown: func(ctx context.Context) error {
-			_ = provider.Shutdown(ctx)
-			if tracerProvider != nil {
-				_ = tracerProvider.Shutdown(ctx)
+			var errs []error
+			if err := provider.Shutdown(ctx); err != nil {
+				errs = append(errs, fmt.Errorf("meter provider shutdown: %w", err))
 			}
-			return nil
+			if tracerProvider != nil {
+				if err := tracerProvider.Shutdown(ctx); err != nil {
+					errs = append(errs, fmt.Errorf("tracer provider shutdown: %w", err))
+				}
+			}
+			return errors.Join(errs...)
 		},
 	}
 }

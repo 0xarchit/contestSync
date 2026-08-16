@@ -62,7 +62,9 @@ func main() {
 		defer func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			_ = otelMetrics.Shutdown(shutdownCtx)
+			if err := otelMetrics.Shutdown(shutdownCtx); err != nil {
+				slog.Error("OTel shutdown returned error", "error", err)
+			}
 		}()
 	}
 
