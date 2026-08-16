@@ -35,6 +35,7 @@ type SyncTask struct {
 }
 
 type Queue struct {
+	cfg             *config.Config
 	AMQPConn        *amqp.Connection
 	AMQPChannel     *amqp.Channel
 	DB              *pgxpool.Pool
@@ -44,67 +45,87 @@ type Queue struct {
 	extractionCh    chan string
 	syncCh          chan int
 	wg              stdSync.WaitGroup
+	mu              stdSync.RWMutex
 	OnTelegramEvent func(event, details string)
 }
 
 func New(cfg *config.Config, db *pgxpool.Pool, syncer *sync.Syncer) (*Queue, error) {
-	if cfg.AMQPURL == "" {
-		slog.Info("AMQP URL not configured; falling back to in-memory queue")
-		return &Queue{
-			DB:           db,
-			Syncer:       syncer,
-			useInMemory:  true,
-			extractionCh: make(chan string, 100),
-			syncCh:       make(chan int, 1000),
-		}, nil
+	q := &Queue{
+		cfg:          cfg,
+		DB:           db,
+		Syncer:       syncer,
+		extractionCh: make(chan string, 100),
+		syncCh:       make(chan int, 1000),
 	}
 
-	conn, err := amqp.Dial(cfg.AMQPURL)
+	if cfg.AMQPURL == "" {
+		slog.Info("AMQP URL not configured; running in-memory queue")
+		q.useInMemory = true
+		return q, nil
+	}
+
+	if err := q.connectAMQP(); err != nil {
+		slog.Error("failed initial connection to AMQP broker, falling back to in-memory queue", "error", err)
+		q.useInMemory = true
+		return q, nil
+	}
+
+	return q, nil
+}
+
+func (q *Queue) connectAMQP() error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if q.AMQPChannel != nil {
+		_ = q.AMQPChannel.Close()
+	}
+	if q.AMQPConn != nil {
+		_ = q.AMQPConn.Close()
+	}
+
+	amqpCfg := amqp.Config{
+		Heartbeat: 10 * time.Second,
+		Locale:    "en_US",
+	}
+
+	conn, err := amqp.DialConfig(q.cfg.AMQPURL, amqpCfg)
 	if err != nil {
-		slog.Error("failed to connect to AMQP broker, falling back to in-memory queue", "error", err)
-		return &Queue{
-			DB:           db,
-			Syncer:       syncer,
-			useInMemory:  true,
-			extractionCh: make(chan string, 100),
-			syncCh:       make(chan int, 1000),
-		}, nil
+		return fmt.Errorf("failed to dial AMQP broker: %w", err)
 	}
 
 	ch, err := conn.Channel()
 	if err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("failed to open AMQP channel: %w", err)
+		return fmt.Errorf("failed to open AMQP channel: %w", err)
 	}
 
 	_, err = ch.QueueDeclare(QueueExtraction, true, false, false, false, nil)
 	if err != nil {
 		_ = ch.Close()
 		_ = conn.Close()
-		return nil, fmt.Errorf("failed to declare extraction queue: %w", err)
+		return fmt.Errorf("failed to declare extraction queue: %w", err)
 	}
 
 	_, err = ch.QueueDeclare(QueueSync, true, false, false, false, nil)
 	if err != nil {
 		_ = ch.Close()
 		_ = conn.Close()
-		return nil, fmt.Errorf("failed to declare sync queue: %w", err)
+		return fmt.Errorf("failed to declare sync queue: %w", err)
 	}
 
+	q.AMQPConn = conn
+	q.AMQPChannel = ch
 	slog.Info("successfully connected to CloudAMQP LavinMQ broker")
-
-	return &Queue{
-		AMQPConn:    conn,
-		AMQPChannel: ch,
-		DB:          db,
-		Syncer:      syncer,
-	}, nil
+	return nil
 }
 
 func (q *Queue) Health(ctx context.Context) error {
 	if q.useInMemory {
 		return nil
 	}
+	q.mu.RLock()
+	defer q.mu.RUnlock()
 	if q.AMQPConn == nil || q.AMQPConn.IsClosed() {
 		return fmt.Errorf("AMQP connection is closed")
 	}
@@ -112,7 +133,12 @@ func (q *Queue) Health(ctx context.Context) error {
 }
 
 func (q *Queue) PublishExtractionTask(ctx context.Context, platform string) error {
-	if q.useInMemory || q.AMQPChannel == nil {
+	q.mu.RLock()
+	inMemory := q.useInMemory || q.AMQPChannel == nil || q.AMQPConn == nil || q.AMQPConn.IsClosed()
+	ch := q.AMQPChannel
+	q.mu.RUnlock()
+
+	if inMemory {
 		select {
 		case q.extractionCh <- platform:
 			return nil
@@ -129,7 +155,7 @@ func (q *Queue) PublishExtractionTask(ctx context.Context, platform string) erro
 		return err
 	}
 
-	return q.AMQPChannel.PublishWithContext(
+	return ch.PublishWithContext(
 		ctx,
 		"",
 		QueueExtraction,
@@ -144,7 +170,12 @@ func (q *Queue) PublishExtractionTask(ctx context.Context, platform string) erro
 }
 
 func (q *Queue) PublishSyncTask(ctx context.Context, userID int) error {
-	if q.useInMemory || q.AMQPChannel == nil {
+	q.mu.RLock()
+	inMemory := q.useInMemory || q.AMQPChannel == nil || q.AMQPConn == nil || q.AMQPConn.IsClosed()
+	ch := q.AMQPChannel
+	q.mu.RUnlock()
+
+	if inMemory {
 		select {
 		case q.syncCh <- userID:
 			return nil
@@ -161,7 +192,7 @@ func (q *Queue) PublishSyncTask(ctx context.Context, userID int) error {
 		return err
 	}
 
-	return q.AMQPChannel.PublishWithContext(
+	return ch.PublishWithContext(
 		ctx,
 		"",
 		QueueSync,
@@ -184,13 +215,208 @@ func (q *Queue) InvalidateContestsCache(ctx context.Context, platform string) er
 }
 
 func (q *Queue) StartConsumers(ctx context.Context, cfg *config.Config) {
-	if q.useInMemory || q.AMQPChannel == nil {
+	if q.useInMemory {
 		go q.consumeExtractionInMemory(ctx)
 		go q.consumeSyncInMemory(ctx)
 		return
 	}
-	go q.consumeExtractionAMQP(ctx)
-	go q.consumeSyncAMQP(ctx)
+
+	go q.runSelfHealingExtractionConsumer(ctx)
+	go q.runSelfHealingSyncConsumer(ctx)
+}
+
+func (q *Queue) runSelfHealingExtractionConsumer(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		q.mu.RLock()
+		conn := q.AMQPConn
+		q.mu.RUnlock()
+
+		if conn == nil || conn.IsClosed() {
+			slog.Warn("AMQP connection closed, attempting reconnect before extraction consumer restart...")
+			if err := q.reconnectWithBackoff(ctx); err != nil {
+				return
+			}
+		}
+
+		q.mu.RLock()
+		ch := q.AMQPChannel
+		q.mu.RUnlock()
+
+		if ch == nil {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		msgs, err := ch.Consume(
+			QueueExtraction,
+			"extraction-consumer",
+			false,
+			false,
+			false,
+			false,
+			nil,
+		)
+		if err != nil {
+			slog.Warn("failed to start AMQP extraction consumer, reconnecting...", "error", err)
+			_ = q.reconnectWithBackoff(ctx)
+			continue
+		}
+
+		slog.Info("started AMQP extraction consumer")
+		sem := make(chan struct{}, 3)
+		active := true
+
+		for active {
+			select {
+			case msg, ok := <-msgs:
+				if !ok {
+					slog.Warn("AMQP extraction consumer channel closed, restarting consumer...")
+					active = false
+					break
+				}
+
+				var task ExtractionTask
+				if err := json.Unmarshal(msg.Body, &task); err != nil {
+					slog.Error("failed to unmarshal extraction task", "error", err)
+					_ = msg.Nack(false, false)
+					continue
+				}
+
+				sem <- struct{}{}
+				q.wg.Add(1)
+				go func(d amqp.Delivery, plat string) {
+					defer q.wg.Done()
+					defer func() { <-sem }()
+					q.handleExtraction(ctx, plat)
+					_ = d.Ack(false)
+				}(msg, task.Platform)
+
+			case <-ctx.Done():
+				return
+			}
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func (q *Queue) runSelfHealingSyncConsumer(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		q.mu.RLock()
+		conn := q.AMQPConn
+		q.mu.RUnlock()
+
+		if conn == nil || conn.IsClosed() {
+			slog.Warn("AMQP connection closed, attempting reconnect before sync consumer restart...")
+			if err := q.reconnectWithBackoff(ctx); err != nil {
+				return
+			}
+		}
+
+		q.mu.RLock()
+		ch := q.AMQPChannel
+		q.mu.RUnlock()
+
+		if ch == nil {
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		msgs, err := ch.Consume(
+			QueueSync,
+			"sync-consumer",
+			false,
+			false,
+			false,
+			false,
+			nil,
+		)
+		if err != nil {
+			slog.Warn("failed to start AMQP sync consumer, reconnecting...", "error", err)
+			_ = q.reconnectWithBackoff(ctx)
+			continue
+		}
+
+		slog.Info("started AMQP sync consumer")
+		sem := make(chan struct{}, 10)
+		active := true
+
+		for active {
+			select {
+			case msg, ok := <-msgs:
+				if !ok {
+					slog.Warn("AMQP sync consumer channel closed, restarting consumer...")
+					active = false
+					break
+				}
+
+				var task SyncTask
+				if err := json.Unmarshal(msg.Body, &task); err != nil {
+					slog.Error("failed to unmarshal sync task", "error", err)
+					_ = msg.Nack(false, false)
+					continue
+				}
+
+				sem <- struct{}{}
+				q.wg.Add(1)
+				go func(d amqp.Delivery, uid int) {
+					defer q.wg.Done()
+					defer func() { <-sem }()
+					if err := q.Syncer.SyncUser(ctx, uid); err != nil {
+						slog.Error("sync failed in consumer", "user_id", uid, "error", err)
+					}
+					_ = d.Ack(false)
+				}(msg, task.UserID)
+
+			case <-ctx.Done():
+				return
+			}
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func (q *Queue) reconnectWithBackoff(ctx context.Context) error {
+	backoff := 1 * time.Second
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		slog.Info("attempting to reconnect to AMQP broker...", "backoff", backoff)
+		if err := q.connectAMQP(); err == nil {
+			slog.Info("reconnection to AMQP broker successful")
+			return nil
+		} else {
+			slog.Warn("AMQP reconnection attempt failed", "error", err)
+		}
+
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		backoff *= 2
+		if backoff > 30*time.Second {
+			backoff = 30 * time.Second
+		}
+	}
 }
 
 func (q *Queue) consumeExtractionInMemory(ctx context.Context) {
@@ -227,104 +453,6 @@ func (q *Queue) consumeSyncInMemory(ctx context.Context) {
 					slog.Error("sync failed in in-memory consumer", "user_id", uid, "error", err)
 				}
 			}(userID)
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (q *Queue) consumeExtractionAMQP(ctx context.Context) {
-	msgs, err := q.AMQPChannel.Consume(
-		QueueExtraction,
-		"extraction-consumer",
-		false,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		slog.Error("failed to consume extraction queue", "error", err)
-		return
-	}
-
-	slog.Info("started AMQP extraction consumer")
-	sem := make(chan struct{}, 3)
-
-	for {
-		select {
-		case msg, ok := <-msgs:
-			if !ok {
-				slog.Warn("AMQP extraction consumer channel closed")
-				return
-			}
-
-			var task ExtractionTask
-			if err := json.Unmarshal(msg.Body, &task); err != nil {
-				slog.Error("failed to unmarshal extraction task", "error", err)
-				msg.Nack(false, false)
-				continue
-			}
-
-			sem <- struct{}{}
-			q.wg.Add(1)
-			go func(d amqp.Delivery, plat string) {
-				defer q.wg.Done()
-				defer func() { <-sem }()
-				q.handleExtraction(ctx, plat)
-				d.Ack(false)
-			}(msg, task.Platform)
-
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (q *Queue) consumeSyncAMQP(ctx context.Context) {
-	msgs, err := q.AMQPChannel.Consume(
-		QueueSync,
-		"sync-consumer",
-		false,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		slog.Error("failed to consume sync queue", "error", err)
-		return
-	}
-
-	slog.Info("started AMQP sync consumer")
-	sem := make(chan struct{}, 10)
-
-	for {
-		select {
-		case msg, ok := <-msgs:
-			if !ok {
-				slog.Warn("AMQP sync consumer channel closed")
-				return
-			}
-
-			var task SyncTask
-			if err := json.Unmarshal(msg.Body, &task); err != nil {
-				slog.Error("failed to unmarshal sync task", "error", err)
-				msg.Nack(false, false)
-				continue
-			}
-
-			sem <- struct{}{}
-			q.wg.Add(1)
-			go func(d amqp.Delivery, uid int) {
-				defer q.wg.Done()
-				defer func() { <-sem }()
-				if err := q.Syncer.SyncUser(ctx, uid); err != nil {
-					slog.Error("sync failed in consumer", "user_id", uid, "error", err)
-				}
-				d.Ack(false)
-			}(msg, task.UserID)
-
 		case <-ctx.Done():
 			return
 		}
@@ -430,11 +558,16 @@ func (q *Queue) logDatabaseContestsTelemetry(ctx context.Context) {
 }
 
 func (q *Queue) Close() error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	if q.AMQPChannel != nil {
-		q.AMQPChannel.Close()
+		_ = q.AMQPChannel.Close()
+		q.AMQPChannel = nil
 	}
 	if q.AMQPConn != nil {
-		return q.AMQPConn.Close()
+		err := q.AMQPConn.Close()
+		q.AMQPConn = nil
+		return err
 	}
 	return nil
 }

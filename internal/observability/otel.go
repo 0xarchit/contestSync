@@ -77,6 +77,13 @@ func InitOTel(serviceName string) *OTelMetrics {
 	opts := []otlpmetrichttp.Option{
 		otlpmetrichttp.WithEndpoint(trimmedEndpoint),
 		otlpmetrichttp.WithURLPath(urlPath),
+		otlpmetrichttp.WithTimeout(30 * time.Second),
+		otlpmetrichttp.WithRetry(otlpmetrichttp.RetryConfig{
+			Enabled:         true,
+			InitialInterval: 2 * time.Second,
+			MaxInterval:     15 * time.Second,
+			MaxElapsedTime:  60 * time.Second,
+		}),
 	}
 	if strings.HasPrefix(endpoint, "http://") {
 		opts = append(opts, otlpmetrichttp.WithInsecure())
@@ -94,6 +101,13 @@ func InitOTel(serviceName string) *OTelMetrics {
 	traceOpts := []otlptracehttp.Option{
 		otlptracehttp.WithEndpoint(trimmedEndpoint),
 		otlptracehttp.WithURLPath(traceUrlPath),
+		otlptracehttp.WithTimeout(30 * time.Second),
+		otlptracehttp.WithRetry(otlptracehttp.RetryConfig{
+			Enabled:         true,
+			InitialInterval: 2 * time.Second,
+			MaxInterval:     15 * time.Second,
+			MaxElapsedTime:  60 * time.Second,
+		}),
 	}
 	if strings.HasPrefix(endpoint, "http://") {
 		traceOpts = append(traceOpts, otlptracehttp.WithInsecure())
@@ -121,7 +135,11 @@ func InitOTel(serviceName string) *OTelMetrics {
 
 	provider := sdkmetric.NewMeterProvider(
 		sdkmetric.WithResource(res),
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(15*time.Second))),
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(
+			exporter,
+			sdkmetric.WithInterval(30*time.Second),
+			sdkmetric.WithTimeout(25*time.Second),
+		)),
 	)
 	otel.SetMeterProvider(provider)
 
@@ -129,7 +147,11 @@ func InitOTel(serviceName string) *OTelMetrics {
 	if traceExporter != nil {
 		tracerProvider = sdktrace.NewTracerProvider(
 			sdktrace.WithResource(res),
-			sdktrace.WithBatcher(traceExporter),
+			sdktrace.WithBatcher(
+				traceExporter,
+				sdktrace.WithBatchTimeout(30*time.Second),
+				sdktrace.WithExportTimeout(25*time.Second),
+			),
 		)
 		otel.SetTracerProvider(tracerProvider)
 	}
