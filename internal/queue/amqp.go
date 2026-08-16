@@ -266,7 +266,6 @@ func (q *Queue) runSelfHealingExtractionConsumer(ctx context.Context) {
 
 		q.mu.RLock()
 		conn := q.AMQPConn
-		ch := q.AMQPChannel
 		closed := q.isClosed
 		q.mu.RUnlock()
 
@@ -274,24 +273,32 @@ func (q *Queue) runSelfHealingExtractionConsumer(ctx context.Context) {
 			return
 		}
 
-		if conn == nil || conn.IsClosed() || ch == nil || ch.IsClosed() {
+		if conn == nil || conn.IsClosed() {
 			slog.Warn("AMQP connection closed, attempting reconnect before extraction consumer restart...")
 			if err := q.reconnectWithBackoff(ctx); err != nil {
 				return
 			}
+			q.mu.RLock()
+			conn = q.AMQPConn
+			q.mu.RUnlock()
 		}
 
-		q.mu.RLock()
-		ch = q.AMQPChannel
-		q.mu.RUnlock()
-
-		if ch == nil || ch.IsClosed() {
+		if conn == nil || conn.IsClosed() {
 			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		ch, err := conn.Channel()
+		if err != nil {
+			slog.Warn("failed to open dedicated channel for extraction consumer, reconnecting...", "error", err)
+			_ = q.reconnectWithBackoff(ctx)
+			time.Sleep(1 * time.Second)
 			continue
 		}
 
 		if err := ch.Qos(3, 0, false); err != nil {
 			slog.Warn("failed to set Qos for extraction consumer, reconnecting...", "error", err)
+			_ = ch.Close()
 			_ = q.reconnectWithBackoff(ctx)
 			time.Sleep(1 * time.Second)
 			continue
@@ -308,6 +315,7 @@ func (q *Queue) runSelfHealingExtractionConsumer(ctx context.Context) {
 		)
 		if err != nil {
 			slog.Warn("failed to start AMQP extraction consumer, reconnecting...", "error", err)
+			_ = ch.Close()
 			_ = q.reconnectWithBackoff(ctx)
 			time.Sleep(1 * time.Second)
 			continue
@@ -344,20 +352,37 @@ func (q *Queue) runSelfHealingExtractionConsumer(ctx context.Context) {
 						slog.Error("extraction task failed in consumer", "platform", t.Platform, "retry_count", t.RetryCount, "error", err)
 						if t.RetryCount < 2 {
 							t.RetryCount++
-							if retryBody, mErr := json.Marshal(t); mErr == nil {
-								q.mu.RLock()
-								ch := q.AMQPChannel
-								q.mu.RUnlock()
-								if ch != nil && !ch.IsClosed() {
-									_ = ch.PublishWithContext(ctx, "", QueueExtraction, false, false, amqp.Publishing{
-										ContentType:  "application/json",
-										DeliveryMode: amqp.Persistent,
-										Body:         retryBody,
-									})
-								}
+							retryBody, mErr := json.Marshal(t)
+							if mErr != nil {
+								slog.Error("failed to marshal extraction retry task", "error", mErr)
+								_ = d.Nack(false, true)
+								return
 							}
+
+							q.mu.RLock()
+							pubCh := q.AMQPChannel
+							q.mu.RUnlock()
+
+							if pubCh == nil || pubCh.IsClosed() {
+								slog.Error("cannot republish extraction retry task: channel closed")
+								_ = d.Nack(false, true)
+								return
+							}
+
+							if pubErr := pubCh.PublishWithContext(ctx, "", QueueExtraction, false, false, amqp.Publishing{
+								ContentType:  "application/json",
+								DeliveryMode: amqp.Persistent,
+								Body:         retryBody,
+							}); pubErr != nil {
+								slog.Error("failed to publish extraction retry task", "error", pubErr)
+								_ = d.Nack(false, true)
+								return
+							}
+						} else {
+							slog.Warn("extraction task exhausted all retries, discarding", "platform", t.Platform)
 						}
-						// Always Ack the current delivery since we either re-published with incremented count or exhausted retries
+
+						// Ack current delivery now that retry has been successfully queued or retry budget exhausted
 						if ackErr := d.Ack(false); ackErr != nil {
 							slog.Error("failed to ack failed extraction delivery", "error", ackErr)
 						}
@@ -387,7 +412,6 @@ func (q *Queue) runSelfHealingSyncConsumer(ctx context.Context) {
 
 		q.mu.RLock()
 		conn := q.AMQPConn
-		ch := q.AMQPChannel
 		closed := q.isClosed
 		q.mu.RUnlock()
 
@@ -395,24 +419,32 @@ func (q *Queue) runSelfHealingSyncConsumer(ctx context.Context) {
 			return
 		}
 
-		if conn == nil || conn.IsClosed() || ch == nil || ch.IsClosed() {
+		if conn == nil || conn.IsClosed() {
 			slog.Warn("AMQP connection closed, attempting reconnect before sync consumer restart...")
 			if err := q.reconnectWithBackoff(ctx); err != nil {
 				return
 			}
+			q.mu.RLock()
+			conn = q.AMQPConn
+			q.mu.RUnlock()
 		}
 
-		q.mu.RLock()
-		ch = q.AMQPChannel
-		q.mu.RUnlock()
-
-		if ch == nil || ch.IsClosed() {
+		if conn == nil || conn.IsClosed() {
 			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		ch, err := conn.Channel()
+		if err != nil {
+			slog.Warn("failed to open dedicated channel for sync consumer, reconnecting...", "error", err)
+			_ = q.reconnectWithBackoff(ctx)
+			time.Sleep(1 * time.Second)
 			continue
 		}
 
 		if err := ch.Qos(10, 0, false); err != nil {
 			slog.Warn("failed to set Qos for sync consumer, reconnecting...", "error", err)
+			_ = ch.Close()
 			_ = q.reconnectWithBackoff(ctx)
 			time.Sleep(1 * time.Second)
 			continue
@@ -429,6 +461,7 @@ func (q *Queue) runSelfHealingSyncConsumer(ctx context.Context) {
 		)
 		if err != nil {
 			slog.Warn("failed to start AMQP sync consumer, reconnecting...", "error", err)
+			_ = ch.Close()
 			_ = q.reconnectWithBackoff(ctx)
 			time.Sleep(1 * time.Second)
 			continue
@@ -465,20 +498,37 @@ func (q *Queue) runSelfHealingSyncConsumer(ctx context.Context) {
 						slog.Error("sync failed in consumer", "user_id", t.UserID, "retry_count", t.RetryCount, "error", err)
 						if t.RetryCount < 2 {
 							t.RetryCount++
-							if retryBody, mErr := json.Marshal(t); mErr == nil {
-								q.mu.RLock()
-								ch := q.AMQPChannel
-								q.mu.RUnlock()
-								if ch != nil && !ch.IsClosed() {
-									_ = ch.PublishWithContext(ctx, "", QueueSync, false, false, amqp.Publishing{
-										ContentType:  "application/json",
-										DeliveryMode: amqp.Persistent,
-										Body:         retryBody,
-									})
-								}
+							retryBody, mErr := json.Marshal(t)
+							if mErr != nil {
+								slog.Error("failed to marshal sync retry task", "error", mErr)
+								_ = d.Nack(false, true)
+								return
 							}
+
+							q.mu.RLock()
+							pubCh := q.AMQPChannel
+							q.mu.RUnlock()
+
+							if pubCh == nil || pubCh.IsClosed() {
+								slog.Error("cannot republish sync retry task: channel closed")
+								_ = d.Nack(false, true)
+								return
+							}
+
+							if pubErr := pubCh.PublishWithContext(ctx, "", QueueSync, false, false, amqp.Publishing{
+								ContentType:  "application/json",
+								DeliveryMode: amqp.Persistent,
+								Body:         retryBody,
+							}); pubErr != nil {
+								slog.Error("failed to publish sync retry task", "error", pubErr)
+								_ = d.Nack(false, true)
+								return
+							}
+						} else {
+							slog.Warn("sync task exhausted all retries, discarding", "user_id", t.UserID)
 						}
-						// Always Ack the current delivery since we either re-published with incremented count or exhausted retries
+
+						// Ack current delivery now that retry has been successfully queued or retry budget exhausted
 						if ackErr := d.Ack(false); ackErr != nil {
 							slog.Error("failed to ack failed sync delivery", "error", ackErr)
 						}

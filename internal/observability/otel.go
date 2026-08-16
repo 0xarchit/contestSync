@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -79,7 +80,7 @@ func InitOTel(serviceName string) *OTelMetrics {
 	opts := []otlpmetrichttp.Option{
 		otlpmetrichttp.WithEndpoint(trimmedEndpoint),
 		otlpmetrichttp.WithURLPath(urlPath),
-		otlpmetrichttp.WithTimeout(65 * time.Second),
+		otlpmetrichttp.WithTimeout(15 * time.Second),
 		otlpmetrichttp.WithRetry(otlpmetrichttp.RetryConfig{
 			Enabled:         true,
 			InitialInterval: 2 * time.Second,
@@ -103,7 +104,7 @@ func InitOTel(serviceName string) *OTelMetrics {
 	traceOpts := []otlptracehttp.Option{
 		otlptracehttp.WithEndpoint(trimmedEndpoint),
 		otlptracehttp.WithURLPath(traceUrlPath),
-		otlptracehttp.WithTimeout(65 * time.Second),
+		otlptracehttp.WithTimeout(15 * time.Second),
 		otlptracehttp.WithRetry(otlptracehttp.RetryConfig{
 			Enabled:         true,
 			InitialInterval: 2 * time.Second,
@@ -186,14 +187,33 @@ func InitOTel(serviceName string) *OTelMetrics {
 		SyncCounter:             syncCounter,
 		CalendarValidateCounter: validateCounter,
 		Shutdown: func(ctx context.Context) error {
-			var errs []error
-			if err := provider.Shutdown(ctx); err != nil {
-				errs = append(errs, fmt.Errorf("meter provider shutdown: %w", err))
-			}
-			if tracerProvider != nil {
-				if err := tracerProvider.Shutdown(ctx); err != nil {
-					errs = append(errs, fmt.Errorf("tracer provider shutdown: %w", err))
+			var wg sync.WaitGroup
+			errCh := make(chan error, 2)
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := provider.Shutdown(ctx); err != nil {
+					errCh <- fmt.Errorf("meter provider shutdown: %w", err)
 				}
+			}()
+
+			if tracerProvider != nil {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					if err := tracerProvider.Shutdown(ctx); err != nil {
+						errCh <- fmt.Errorf("tracer provider shutdown: %w", err)
+					}
+				}()
+			}
+
+			wg.Wait()
+			close(errCh)
+
+			var errs []error
+			for err := range errCh {
+				errs = append(errs, err)
 			}
 			return errors.Join(errs...)
 		},
