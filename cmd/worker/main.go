@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
@@ -115,6 +116,7 @@ func main() {
 		q.OnTelegramEvent = tgManager.TriggerSystemEvent
 	}
 	q.StartConsumers(shutdownCtx, cfg)
+	startWorkerKeepAlive(shutdownCtx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -240,4 +242,34 @@ func main() {
 	q.Drain()
 
 	slog.Info("worker stopped")
+}
+
+func startWorkerKeepAlive(ctx context.Context) {
+	interval := 10 * time.Second
+	if val := os.Getenv("WORKER_KEEPALIVE_INTERVAL"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil && d > 0 {
+			interval = d
+		}
+	}
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		buf := make([]byte, 64*1024) // 64KB memory working set
+		var count uint64
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case t := <-ticker.C:
+				count++
+				// Touch memory and compute a lightweight hash to maintain active CPU/RAM profile
+				buf[0] = byte(count)
+				buf[len(buf)-1] = byte(t.UnixNano())
+				_ = sha256.Sum256(buf)
+			}
+		}
+	}()
 }
