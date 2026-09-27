@@ -1,0 +1,72 @@
+name: "Daily HF Restart"
+
+on:
+  schedule:
+    - cron: "33 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  restart-workers:
+    name: Restart all worker Spaces
+    runs-on: ubuntu-latest
+    environment: production-worker
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN_WORKER || vars.HF_TOKEN_WORKER || secrets.HF_TOKEN || vars.HF_TOKEN }}
+      HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME_WORKER || vars.HF_SPACE_NAME_WORKER || secrets.HF_SPACE_NAME || vars.HF_SPACE_NAME }}
+    steps:
+      - name: Validate credentials
+        run: |
+          set -e
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE_NAME" ]; then
+            echo "Error: Missing Hugging Face worker credentials!"
+            exit 1
+          fi
+
+      - name: Restart each worker Space
+        run: |
+          set -e
+          IFS=',' read -ra SPACES <<< "$HF_SPACE_NAME"
+          for SPACE in "${SPACES[@]}"; do
+            CLEAN=$(echo "$SPACE" | xargs)
+            [ -z "$CLEAN" ] && continue
+            echo "Restarting worker: $CLEAN"
+            curl -fsS -X POST -H "Authorization: Bearer $HF_TOKEN" \
+              "https://huggingface.co/api/spaces/$CLEAN/restart"
+            echo
+          done
+
+  restart-server-if-down:
+    name: Restart server Space only if down
+    runs-on: ubuntu-latest
+    environment: production-server
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN_SERVER || vars.HF_TOKEN_SERVER || secrets.HF_TOKEN || vars.HF_TOKEN }}
+      HF_SPACE_NAME: ${{ secrets.HF_SPACE_NAME_SERVER || vars.HF_SPACE_NAME_SERVER || secrets.HF_SPACE_NAME || vars.HF_SPACE_NAME }}
+    steps:
+      - name: Validate credentials
+        run: |
+          set -e
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE_NAME" ]; then
+            echo "Error: Missing Hugging Face server credentials!"
+            exit 1
+          fi
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Check status and restart only if down
+        run: |
+          set -e
+          STAGE=$(curl -fsS -H "Authorization: Bearer $HF_TOKEN" \
+            "https://huggingface.co/api/spaces/$HF_SPACE_NAME" | jq -r '.runtime.stage')
+          echo "Server stage: $STAGE"
+          case "$STAGE" in
+            PAUSED|STOPPED|SLEEPING|CRASHED|ERROR|RUNTIME_ERROR|BUILD_ERROR|CONFIG_ERROR|NO_APP_FILE)
+              echo "Server is down ($STAGE) -> restarting"
+              curl -fsS -X POST -H "Authorization: Bearer $HF_TOKEN" \
+                "https://huggingface.co/api/spaces/$HF_SPACE_NAME/restart" ;;
+            RUNNING)
+              echo "Server is up -> nothing to do" ;;
+            *)
+              echo "Transient/unknown stage ($STAGE) -> skip to avoid interrupting boot" ;;
+          esac
