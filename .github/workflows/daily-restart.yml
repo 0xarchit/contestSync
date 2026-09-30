@@ -2,7 +2,7 @@ name: "Daily HF Restart"
 
 on:
   schedule:
-    - cron: "33 2 * * *"
+    - cron: "30 5 * * *"
   workflow_dispatch:
 
 jobs:
